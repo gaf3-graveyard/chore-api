@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: chore-nandy-io
+  labels:
+    app: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      serviceAccount: api
+      containers:
+      - name: api
+        image: docker.io/nandyio/chore-api:0.1
+        imagePullPolicy: Always
+        env:
+        - name: MYSQL_HOST
+          value: db.mysql-klot-io
+        - name: mYSQL_PORT
+          value: "6379"
+        - name: REDIS_HOST
+          value: db.redis-klot-io
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_CHANNEL
+          value: nandy.io/chore
+        ports:
+        - containerPort: 80
+        readinessProbe:
+          initialDelaySeconds: 5
+          httpGet:
+            path: /health
+            port: 80
+        livenessProbe:
+          initialDelaySeconds: 2
+          periodSeconds: 5
+          httpGet:
+            path: /health
+            port: 80
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: api
+  namespace: chore-nandy-io
+spec:
+  selector:
+    app: api
+  type: LoadBalancer
+  ports:
+  - name: http
+    protocol: TCP
+    port: 80
+    targetPort: 80

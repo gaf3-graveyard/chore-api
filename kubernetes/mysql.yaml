@@ -1,0 +1,21 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: api-mysql-
+  namespace: chore-nandy-io
+spec:
+  template:
+    spec:
+      volumes:
+      - name: subscriptions
+        configMap:
+          name: subscriptions
+      containers:
+      - name: api-mysql
+        image: docker.io/nandyio/chore-api:0.1
+        imagePullPolicy: Always
+        command: ["/opt/nandy-io/bin/db.py"]
+        volumeMounts:
+        - name: subscriptions
+          mountPath: /opt/nandy-io/subscriptions
+      restartPolicy: Never
