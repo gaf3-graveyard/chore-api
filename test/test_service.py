@@ -772,7 +772,7 @@ class TestRoutineAction(TestBase):
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     @unittest.mock.patch("service.RoutineAction.notify")
-    def test_incomplete(self, mock_notify):
+    def test_uncomplete(self, mock_notify):
 
         routine = self.sample.routine("unit", "hey", status="ended", data={
             "text": "hey",
@@ -780,12 +780,50 @@ class TestRoutineAction(TestBase):
             "end": 0
         })
 
-        self.assertTrue(service.RoutineAction.incomplete(routine))
+        self.assertTrue(service.RoutineAction.uncomplete(routine))
         self.assertNotIn("end", routine.data)
         self.assertEqual(routine.status, "started")
-        mock_notify.assert_called_once_with("incomplete", routine)
+        mock_notify.assert_called_once_with("uncomplete", routine)
 
-        self.assertFalse(service.RoutineAction.incomplete(routine))
+        self.assertFalse(service.RoutineAction.uncomplete(routine))
+        mock_notify.assert_called_once()
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.RoutineAction.notify")
+    def test_expire(self, mock_notify):
+
+        routine = self.sample.routine("unit", "hey", data={
+            "text": "hey",
+            "language": "cursing"
+        })
+
+        self.assertTrue(service.RoutineAction.expire(routine))
+        self.assertTrue(routine.data["expired"])
+        self.assertEqual(routine.data["end"], 7)
+        self.assertEqual(routine.status, "ended")
+        mock_notify.assert_called_once_with("expire", routine)
+
+        self.assertFalse(service.RoutineAction.expire(routine))
+        mock_notify.assert_called_once()
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.RoutineAction.notify")
+    def test_unexpire(self, mock_notify):
+
+        routine = self.sample.routine("unit", "hey", status="ended", data={
+            "text": "hey",
+            "language": "cursing",
+            "expired": True,
+            "end": 0
+        })
+
+        self.assertTrue(service.RoutineAction.unexpire(routine))
+        self.assertFalse(routine.data["expired"])
+        self.assertNotIn("end", routine.data)
+        self.assertEqual(routine.status, "started")
+        mock_notify.assert_called_once_with("unexpire", routine)
+
+        self.assertFalse(service.RoutineAction.unexpire(routine))
         mock_notify.assert_called_once()
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
@@ -863,11 +901,27 @@ class TestRoutineAction(TestBase):
 
         # uncomplete
 
-        self.assertStatusValue(self.api.patch(f"/routine/{routine.id}/incomplete"), 202, "updated", True)
+        self.assertStatusValue(self.api.patch(f"/routine/{routine.id}/uncomplete"), 202, "updated", True)
         item = self.session.query(mysql.Routine).get(routine.id)
         self.session.commit()
         self.assertEqual(item.status, "started")
-        self.assertStatusValue(self.api.patch(f"/routine/{routine.id}/incomplete"), 202, "updated", False)
+        self.assertStatusValue(self.api.patch(f"/routine/{routine.id}/uncomplete"), 202, "updated", False)
+
+        # expire
+
+        self.assertStatusValue(self.api.patch(f"/routine/{routine.id}/expire"), 202, "updated", True)
+        item = self.session.query(mysql.Routine).get(routine.id)
+        self.session.commit()
+        self.assertTrue(item.data["expired"])
+        self.assertStatusValue(self.api.patch(f"/routine/{routine.id}/expire"), 202, "updated", False)
+
+        # unexpire
+
+        self.assertStatusValue(self.api.patch(f"/routine/{routine.id}/unexpire"), 202, "updated", True)
+        item = self.session.query(mysql.Routine).get(routine.id)
+        self.session.commit()
+        self.assertFalse(item.data["expired"])
+        self.assertStatusValue(self.api.patch(f"/routine/{routine.id}/unexpire"), 202, "updated", False)
 
 
 class TestTaskAction(TestBase):
@@ -999,7 +1053,7 @@ class TestTaskAction(TestBase):
         self.assertNotIn("end", routine.data["tasks"][0])
         self.assertEqual(routine.status, "started")
         mock_task_notify.assert_called_once_with("unskip", routine.data["tasks"][0], routine)
-        mock_routine_notify.assert_called_once_with("incomplete", routine)
+        mock_routine_notify.assert_called_once_with("uncomplete", routine)
 
         self.assertFalse(service.TaskAction.unskip(routine.data["tasks"][0], routine))
         mock_task_notify.assert_called_once()
@@ -1031,7 +1085,7 @@ class TestTaskAction(TestBase):
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     @unittest.mock.patch("service.TaskAction.notify")
     @unittest.mock.patch("service.RoutineAction.notify")
-    def test_incomplete(self, mock_routine_notify, mock_task_notify):
+    def test_uncomplete(self, mock_routine_notify, mock_task_notify):
 
         routine = self.sample.routine("unit", "hey", status="ended", data={
             "text": "hey",
@@ -1043,13 +1097,13 @@ class TestTaskAction(TestBase):
             }]
         })
 
-        self.assertTrue(service.TaskAction.incomplete(routine.data["tasks"][0], routine))
+        self.assertTrue(service.TaskAction.uncomplete(routine.data["tasks"][0], routine))
         self.assertNotIn("end", routine.data["tasks"][0])
         self.assertEqual(routine.status, "started")
-        mock_task_notify.assert_called_once_with("incomplete", routine.data["tasks"][0], routine)
-        mock_routine_notify.assert_called_once_with("incomplete", routine)
+        mock_task_notify.assert_called_once_with("uncomplete", routine.data["tasks"][0], routine)
+        mock_routine_notify.assert_called_once_with("uncomplete", routine)
 
-        self.assertFalse(service.TaskAction.incomplete(routine.data["tasks"][0], routine))
+        self.assertFalse(service.TaskAction.uncomplete(routine.data["tasks"][0], routine))
         mock_task_notify.assert_called_once()
         mock_routine_notify.assert_called_once()
 
@@ -1116,11 +1170,11 @@ class TestTaskAction(TestBase):
 
         # uncomplete
 
-        self.assertStatusValue(self.api.patch(f"/routine/{routine.id}/task/0/incomplete"), 202, "updated", True)
+        self.assertStatusValue(self.api.patch(f"/routine/{routine.id}/task/0/uncomplete"), 202, "updated", True)
         item = self.session.query(mysql.Routine).get(routine.id)
         self.session.commit()
         self.assertEqual(item.status, "started")
-        self.assertStatusValue(self.api.patch(f"/routine/{routine.id}/task/0/incomplete"), 202, "updated", False)
+        self.assertStatusValue(self.api.patch(f"/routine/{routine.id}/task/0/uncomplete"), 202, "updated", False)
 
 
 class TestRoutine(TestBase):

@@ -494,7 +494,7 @@ class RoutineAction(flask_restful.Resource):
         return False
 
     @classmethod
-    def incomplete(cls, routine):
+    def uncomplete(cls, routine):
         """
         Uncompletes a routine
         """
@@ -503,10 +503,48 @@ class RoutineAction(flask_restful.Resource):
 
             del routine.data["end"]
             routine.status = "started"
-            cls.notify("incomplete", routine)
+            cls.notify("uncomplete", routine)
 
             return True
         
+        return False
+
+    @classmethod
+    def expire(cls, routine):
+        """
+        Skips a routine
+        """
+
+        # Skip if it hasn't been
+
+        if "expired" not in routine.data or not routine.data["expired"]:
+
+            routine.data["expired"] = True
+            routine.data["end"] = time.time()
+            routine.status = "ended"
+            cls.notify("expire", routine)
+
+            return True
+
+        return False
+
+    @classmethod
+    def unexpire(cls, routine):
+        """
+        Unexpires a routine
+        """
+
+        # Unexpire if it has been
+
+        if "expired" in routine.data and routine.data["expired"]:
+
+            routine.data["expired"] = False
+            del routine.data["end"]
+            routine.status = "started"
+            cls.notify("unexpire", routine)
+
+            return True
+
         return False
 
     @require_session
@@ -514,7 +552,7 @@ class RoutineAction(flask_restful.Resource):
 
         routine = flask.request.session.query(mysql.Routine).get(routine_id)
 
-        if action in ["next", "remind", "pause", "unpause", "skip", "unskip", "complete", "incomplete"]:
+        if action in ["next", "remind", "pause", "unpause", "skip", "unskip", "complete", "uncomplete", "expire", "unexpire"]:
 
             updated = getattr(self, action)(routine)
 
@@ -632,7 +670,7 @@ class TaskAction(flask_restful.Resource):
 
             # Incomplete the overall Routine (if necessary)
 
-            RoutineAction.incomplete(routine)
+            RoutineAction.uncomplete(routine)
 
             return True
 
@@ -666,7 +704,7 @@ class TaskAction(flask_restful.Resource):
         return False
 
     @classmethod
-    def incomplete(cls, task, routine):
+    def uncomplete(cls, task, routine):
         """
         Undoes a specific task
         """
@@ -678,11 +716,11 @@ class TaskAction(flask_restful.Resource):
         if "end" in task:
     
             del task["end"]
-            cls.notify("incomplete", task, routine)
+            cls.notify("uncomplete", task, routine)
 
             # Incomplete the overall Routine (if necessary)
 
-            RoutineAction.incomplete(routine)
+            RoutineAction.uncomplete(routine)
 
             return True
 
@@ -694,7 +732,7 @@ class TaskAction(flask_restful.Resource):
         routine = flask.request.session.query(mysql.Routine).get(routine_id)
         task = routine.data["tasks"][task_id]
 
-        if action in ["remind", "pause", "unpause", "skip", "unskip", "complete", "incomplete"]:
+        if action in ["remind", "pause", "unpause", "skip", "unskip", "complete", "uncomplete"]:
 
             updated = getattr(self, action)(task, routine)
 
