@@ -1,4 +1,5 @@
 import os
+import time
 
 import yaml
 import pymysql
@@ -9,7 +10,7 @@ import sqlalchemy.ext.mutable
 import flask_jsontools
 import sqlalchemy_jsonfield
 
-DATABASE = "nandy_chore"
+DATABASE = "nandy"
 
 class MySQL(object):
     """
@@ -64,6 +65,8 @@ def drop_database():
 
 Base = sqlalchemy.ext.declarative.declarative_base(cls=(flask_jsontools.JsonSerializableBase))
 
+def now():
+    return time.time()
 
 class Person(Base):
 
@@ -71,34 +74,11 @@ class Person(Base):
     
     id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True, autoincrement=True)
     name = sqlalchemy.Column(sqlalchemy.String(64), nullable=False)
-    email = sqlalchemy.Column(sqlalchemy.String(128), nullable=False)
 
     sqlalchemy.schema.UniqueConstraint('name', name='label')
-    sqlalchemy.schema.UniqueConstraint('email', name='email')
 
     def __repr__(self):
         return "<Person(name='%s')>" % (self.name)
-
-
-class Area(Base):
-
-    __tablename__ = "area"
-    
-    id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True, autoincrement=True)
-    name = sqlalchemy.Column(sqlalchemy.String(64), nullable=False)
-    status = sqlalchemy.Column(sqlalchemy.String(32), nullable=False)
-    updated = sqlalchemy.Column(sqlalchemy.Integer)
-    data = sqlalchemy.Column(
-        sqlalchemy.ext.mutable.MutableDict.as_mutable(
-            sqlalchemy_jsonfield.JSONField(enforce_string=True,enforce_unicode=False)
-        ), 
-        nullable=False
-    )
-
-    sqlalchemy.schema.UniqueConstraint('name', name='label')
-
-    def __repr__(self):
-        return "<Area(name='%s')>" % (self.name)
 
 
 class Template(Base):
@@ -121,16 +101,41 @@ class Template(Base):
         return "<Template(name='%s',kind='%s')>" % (self.name, self.kind)
 
 
-class Routine(Base):
+class Area(Base):
 
-    __tablename__ = "routine"
+    __tablename__ = "area"
     
     id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True, autoincrement=True)
     person_id = sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey("person.id"), nullable=False)
-    name = sqlalchemy.Column(sqlalchemy.String(255), nullable=False)
-    status = sqlalchemy.Column(sqlalchemy.Enum("started", "ended"))
-    created = sqlalchemy.Column(sqlalchemy.Integer)
-    updated = sqlalchemy.Column(sqlalchemy.Integer)
+    name = sqlalchemy.Column(sqlalchemy.String(64), nullable=False)
+    status = sqlalchemy.Column(sqlalchemy.Enum("positive", "negative"), default="positive")
+    created = sqlalchemy.Column(sqlalchemy.Integer, default=now)
+    updated = sqlalchemy.Column(sqlalchemy.Integer, default=now)
+    data = sqlalchemy.Column(
+        sqlalchemy.ext.mutable.MutableDict.as_mutable(
+            sqlalchemy_jsonfield.JSONField(enforce_string=True,enforce_unicode=False)
+        ), 
+        nullable=False
+    )
+
+    sqlalchemy.schema.UniqueConstraint('name', name='label')
+
+    person = sqlalchemy.orm.relationship("Person") 
+
+    def __repr__(self):
+        return "<Area(name='%s')>" % (self.name)
+
+
+class Act(Base):
+
+    __tablename__ = "act"
+    
+    id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True, autoincrement=True)
+    person_id = sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey("person.id"), nullable=False)
+    name = sqlalchemy.Column(sqlalchemy.String(128), nullable=False)
+    status = sqlalchemy.Column(sqlalchemy.Enum("positive", "negative"), default="positive")
+    created = sqlalchemy.Column(sqlalchemy.Integer, default=now)
+    updated = sqlalchemy.Column(sqlalchemy.Integer, default=now)
     data = sqlalchemy.Column(
         sqlalchemy.ext.mutable.MutableDict.as_mutable(
             sqlalchemy_jsonfield.JSONField(enforce_string=True,enforce_unicode=False)
@@ -143,7 +148,7 @@ class Routine(Base):
     sqlalchemy.schema.UniqueConstraint('name', 'person_id', 'created', name='label')
 
     def __repr__(self):
-        return "<Routine(name='%s',person='%s',created=%s)>" % (self.name, self.person.name, self.created)
+        return "<Act(name='%s',person='%s',created=%s)>" % (self.name, self.person.name, self.created)
 
 
 class ToDo(Base):
@@ -153,9 +158,9 @@ class ToDo(Base):
     id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True, autoincrement=True)
     person_id = sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey("person.id"), nullable=False)
     name = sqlalchemy.Column(sqlalchemy.String(255), nullable=False)
-    status = sqlalchemy.Column(sqlalchemy.Enum("needed", "completed"))
-    created = sqlalchemy.Column(sqlalchemy.Integer)
-    updated = sqlalchemy.Column(sqlalchemy.Integer)
+    status = sqlalchemy.Column(sqlalchemy.Enum("opened", "closed"), default="opened")
+    created = sqlalchemy.Column(sqlalchemy.Integer, default=now)
+    updated = sqlalchemy.Column(sqlalchemy.Integer, default=now)
     data = sqlalchemy.Column(
         sqlalchemy.ext.mutable.MutableDict.as_mutable(
             sqlalchemy_jsonfield.JSONField(enforce_string=True,enforce_unicode=False)
@@ -171,15 +176,16 @@ class ToDo(Base):
         return "<ToDo(name='%s',person='%s',created=%s)>" % (self.name, self.person.name, self.created)
 
 
-class Act(Base):
+class Routine(Base):
 
-    __tablename__ = "act"
+    __tablename__ = "routine"
     
     id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True, autoincrement=True)
     person_id = sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey("person.id"), nullable=False)
-    name = sqlalchemy.Column(sqlalchemy.String(128), nullable=False)
-    value = sqlalchemy.Column(sqlalchemy.Enum("negative", "positive"))
-    created = sqlalchemy.Column(sqlalchemy.Integer)
+    name = sqlalchemy.Column(sqlalchemy.String(255), nullable=False)
+    status = sqlalchemy.Column(sqlalchemy.Enum("opened", "closed"), default="opened")
+    created = sqlalchemy.Column(sqlalchemy.Integer, default=now)
+    updated = sqlalchemy.Column(sqlalchemy.Integer, default=now)
     data = sqlalchemy.Column(
         sqlalchemy.ext.mutable.MutableDict.as_mutable(
             sqlalchemy_jsonfield.JSONField(enforce_string=True,enforce_unicode=False)
@@ -192,4 +198,4 @@ class Act(Base):
     sqlalchemy.schema.UniqueConstraint('name', 'person_id', 'created', name='label')
 
     def __repr__(self):
-        return "<Act(name='%s',person='%s',created=%s)>" % (self.name, self.person.name, self.created)
+        return "<Routine(name='%s',person='%s',created=%s)>" % (self.name, self.person.name, self.created)
