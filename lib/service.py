@@ -21,17 +21,15 @@ def app():
 
     app = flask.Flask("nandy-io-speech-api")
 
-    app.kube = None
-
     app.mysql = mysql.MySQL()
 
     app.redis = redis.StrictRedis(host=os.environ['REDIS_HOST'], port=int(os.environ['REDIS_PORT']))
     app.channel = os.environ['REDIS_CHANNEL']
 
-    if os.path.exists("/opt/nandy-io/secret/config"):
-        app.kube = pykube.HTTPClient(pykube.KubeConfig.from_file("/opt/nandy-io/secret/config"))
-    else:
+    if os.path.exists("/var/run/secrets/kubernetes.io/serviceaccount/token"):
         app.kube = pykube.HTTPClient(pykube.KubeConfig.from_service_account())
+    else:
+        app.kube = pykube.HTTPClient(pykube.KubeConfig.from_url("http://host.docker.internal:7580"))
 
     api = flask_restful.Api(app)
 
@@ -516,7 +514,24 @@ class AreaRUD(Area, BaseRUD):
     pass
 
 class AreaValue(Area, BaseValue):
-    pass
+
+    @classmethod
+    def wrong(cls, model):
+        """
+        Wrongs a model
+        """
+
+        if model.status == "positive":
+
+            model.status = "negative"
+            cls.notify("wrong", model)
+
+            if "todo" in model.data:
+                ToDoAction.create(person_id=model.person.id, data={"area": model.id}, template=model.data["todo"])
+
+            return True
+
+        return False
 
 
 class Act:
@@ -548,7 +563,25 @@ class ToDoRUD(ToDo, BaseRUD):
     pass
 
 class ToDoAction(ToDo, BaseAction):
-    pass
+
+    @classmethod
+    def complete(cls, model):
+        """
+        Completes a model
+        """
+
+        if "end" not in model.data or model.status != "closed":
+
+            model.data["end"] = time.time()
+            model.status = "closed"
+            cls.notify("complete", model)
+
+            if "area" in model.data:
+                AreaValue.right(flask.request.session.query(mysql.Area).get(model.data["area"]))
+
+            return True
+
+        return False
 
 
 class Routine:

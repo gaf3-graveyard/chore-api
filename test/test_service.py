@@ -39,6 +39,7 @@ class TestBase(unittest.TestCase):
         "REDIS_CHANNEL": "stuff"
     })
     @unittest.mock.patch("redis.StrictRedis", MockRedis)
+    @unittest.mock.patch("os.path.exists", unittest.mock.MagicMock(return_value=True))
     @unittest.mock.patch("pykube.HTTPClient", unittest.mock.MagicMock)
     @unittest.mock.patch("pykube.KubeConfig.from_service_account", unittest.mock.MagicMock)
     def setUpClass(cls):
@@ -93,8 +94,9 @@ class TestService(TestBase):
     @unittest.mock.patch("os.path.exists")
     @unittest.mock.patch("pykube.KubeConfig.from_file")
     @unittest.mock.patch("pykube.KubeConfig.from_service_account")
+    @unittest.mock.patch("pykube.KubeConfig.from_url")
     @unittest.mock.patch("pykube.HTTPClient", unittest.mock.MagicMock)
-    def test_app(self, mock_account, mock_file, mock_exists):
+    def test_app(self, mock_url, mock_account, mock_file, mock_exists):
 
         mock_exists.return_value = True
         app = service.app()
@@ -103,14 +105,13 @@ class TestService(TestBase):
         self.assertEqual(app.redis.port, 667)
         self.assertEqual(app.channel, "stuff")
 
-        mock_exists.assert_called_once_with("/opt/nandy-io/secret/config")
-        mock_file.assert_called_once_with("/opt/nandy-io/secret/config")
+        mock_exists.assert_called_once_with("/var/run/secrets/kubernetes.io/serviceaccount/token")
+        mock_account.assert_called_once()
 
         mock_exists.return_value = False
         app = service.app()
 
-        mock_file.assert_called_once_with("/opt/nandy-io/secret/config")
-        mock_account.assert_called_once()
+        mock_url.assert_called_once_with("http://host.docker.internal:7580")
 
     def test_require_session(self):
 
@@ -223,10 +224,10 @@ class TestService(TestBase):
         }])
 
     @unittest.mock.patch("flask.current_app")
-    def test_notify(self, mock_flask):
+    def test_notify(self, mock_request):
 
-        mock_flask.redis = self.app.redis
-        mock_flask.channel = "things"
+        mock_request.redis = self.app.redis
+        mock_request.channel = "things"
 
         service.notify({"a": 1})
 
@@ -465,9 +466,9 @@ class TestArea(TestBase):
     @unittest.mock.patch("flask.request")
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     @unittest.mock.patch("service.notify")
-    def test_create(self, mock_notify, mock_flask):
+    def test_create(self, mock_notify, mock_request):
 
-        mock_flask.session = self.session
+        mock_request.session = self.session
 
         person = self.sample.person("unit")
 
@@ -551,18 +552,34 @@ class TestArea(TestBase):
             "name": "test"
         })
 
+    @unittest.mock.patch("flask.request")
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     @unittest.mock.patch("service.BaseStatus.notify")
-    def test_wrong(self, mock_notify):
+    def test_wrong(self, mock_notify, mock_request):
 
-        model = self.sample.area("unit", "hey")
+        mock_request.session = self.session
+
+        model = self.sample.area("unit", "hey", data={
+            "todo": {
+                "name": "Unit",
+                "text": "test"
+            }
+        })
 
         self.assertTrue(service.AreaValue.wrong(model))
         self.assertEqual(model.status, "negative")
-        mock_notify.assert_called_once_with("wrong", model)
+        item = self.session.query(mysql.ToDo).all()[0]
+        self.assertEqual(item.person.id, model.person.id)
+        self.assertEqual(item.name, "Unit")
+        self.assertEqual(item.data["text"], "test")
+        self.assertEqual(item.data["area"], model.id)
+        mock_notify.assert_has_calls([
+            unittest.mock.call("wrong", model),
+            unittest.mock.call("create", item)
+        ])
 
         self.assertFalse(service.AreaValue.wrong(model))
-        mock_notify.assert_called_once()
+        self.assertEqual(mock_notify.call_count, 2)
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     @unittest.mock.patch("service.BaseStatus.notify")
@@ -718,9 +735,9 @@ class TestAct(TestBase):
     @unittest.mock.patch("flask.request")
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     @unittest.mock.patch("service.notify")
-    def test_create(self, mock_notify, mock_flask):
+    def test_create(self, mock_notify, mock_request):
 
-        mock_flask.session = self.session
+        mock_request.session = self.session
 
         person = self.sample.person("unit")
 
@@ -971,9 +988,9 @@ class TestToDo(TestBase):
     @unittest.mock.patch("flask.request")
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     @unittest.mock.patch("service.notify")
-    def test_create(self, mock_notify, mock_flask):
+    def test_create(self, mock_notify, mock_request):
 
-        mock_flask.session = self.session
+        mock_request.session = self.session
 
         person = self.sample.person("unit")
 
@@ -1136,17 +1153,26 @@ class TestToDo(TestBase):
         self.assertFalse(service.ToDoAction.unskip(todo))
         mock_notify.assert_called_once()
 
+    @unittest.mock.patch("flask.request")
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     @unittest.mock.patch("service.BaseAction.notify")
-    def test_complete(self, mock_notify):
+    @unittest.mock.patch("service.notify", unittest.mock.MagicMock())
+    def test_complete(self, mock_notify, mock_request):
+
+        mock_request.session = self.session
+
+        area = self.sample.area("unit", "test", status="negative")
 
         todo = self.sample.todo("unit", "hey", data={
-            "text": "hey"
+            "text": "hey",
+            "area": area.id
         })
 
         self.assertTrue(service.ToDoAction.complete(todo))
         self.assertEqual(todo.status, "closed")
         self.assertTrue(todo.data["end"], 7)
+        item = self.session.query(mysql.Area).get(area.id)
+        self.assertEqual(item.status, "positive")
         mock_notify.assert_called_once_with("complete", todo)
 
         self.assertFalse(service.ToDoAction.complete(todo))
@@ -1472,9 +1498,9 @@ class TestRoutine(TestBase):
     @unittest.mock.patch("flask.request")
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     @unittest.mock.patch("service.notify", unittest.mock.MagicMock)
-    def test_create(self, mock_flask):
+    def test_create(self, mock_request):
 
-        mock_flask.session = self.session
+        mock_request.session = self.session
 
         person = self.sample.person("unit")
 
