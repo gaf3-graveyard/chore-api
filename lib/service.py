@@ -547,7 +547,20 @@ class ActRUD(Act, BaseRUD):
     pass
 
 class ActValue(Act, BaseValue):
-    pass
+
+    @classmethod
+    def create(cls, **kwargs):
+
+        model = cls.Model(**cls.build(**kwargs))
+        flask.request.session.add(model)
+        flask.request.session.commit()
+
+        cls.notify("create", model)
+
+        if model.status == "negative" and "todo" in model.data:
+            ToDoAction.create(person_id=model.person.id, template=model.data["todo"])
+
+        return model
 
 
 class ToDo:
@@ -578,6 +591,9 @@ class ToDoAction(ToDo, BaseAction):
 
             if "area" in model.data:
                 AreaValue.right(flask.request.session.query(mysql.Area).get(model.data["area"]))
+
+            if "act" in model.data:
+                ActValue.create(person_id=model.person.id, status="positive", template=model.data["act"])
 
             return True
 
