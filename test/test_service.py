@@ -744,32 +744,53 @@ class TestAct(TestBase):
         model = service.ActValue.create(**{
             "person_id": person.id,
             "name": "unit",
+            "status": "negative",
             "created": 6,
             "data": {
-                "text": "hey"
+                "text": "hey",
+                "todo": {
+                    "name": "Unit",
+                    "text": "test"
+                }
             }
         })
 
         self.assertEqual(model.person_id, person.id)
         self.assertEqual(model.name, "unit")
-        self.assertEqual(model.status, "positive")
+        self.assertEqual(model.status, "negative")
         self.assertEqual(model.created, 6)
         self.assertEqual(model.updated, 7)
         self.assertEqual(model.data, {
             "text": "hey",
-            "notified": 7
+            "notified": 7,
+            "todo": {
+                "name": "Unit",
+                "text": "test"
+            }
         })
+
+        todo = self.session.query(mysql.ToDo).filter_by(name="Unit").all()[0]
+        flask.request.session.commit()
+        self.assertEqual(todo.data["text"], "test")
 
         item = self.session.query(mysql.Act).get(model.id)
         flask.request.session.commit()
         self.assertEqual(item.name, "unit")
 
-        mock_notify.assert_called_once_with({
-            "kind": "act",
-            "action": "create",
-            "act": service.model_out(model),
-            "person": service.model_out(model.person)
-        })
+        mock_notify.assert_has_calls([
+            unittest.mock.call({
+                "kind": "act",
+                "action": "create",
+                "act": service.model_out(model),
+                "person": service.model_out(model.person)
+            }),
+            unittest.mock.call({
+                "kind": "todo",
+                "action": "create",
+                "todo": service.model_out(todo),
+                "person": service.model_out(todo.person)
+            })
+        ])
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     def test_post(self):
@@ -1165,15 +1186,25 @@ class TestToDo(TestBase):
 
         todo = self.sample.todo("unit", "hey", data={
             "text": "hey",
-            "area": area.id
+            "area": area.id,
+            "act": {
+                "name": "Unit",
+                "text": "test"
+            }
         })
 
         self.assertTrue(service.ToDoAction.complete(todo))
         self.assertEqual(todo.status, "closed")
         self.assertTrue(todo.data["end"], 7)
+
         item = self.session.query(mysql.Area).get(area.id)
         self.assertEqual(item.status, "positive")
         mock_notify.assert_called_once_with("complete", todo)
+
+        act = self.session.query(mysql.Act).filter_by(name="Unit").all()[0]
+        self.assertEqual(act.person.id, todo.person.id)
+        self.assertEqual(act.status, "positive")
+        self.assertEqual(act.data["text"], "test")
 
         self.assertFalse(service.ToDoAction.complete(todo))
         mock_notify.assert_called_once()
