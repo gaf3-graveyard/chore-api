@@ -1365,7 +1365,6 @@ class TestToDo(TestBase):
         self.assertStatusModels(self.api.get("/todo"), 200, "areas", [])
 
 
-
 class TestRoutine(TestBase):
 
     @unittest.mock.patch("flask.request")
@@ -1376,7 +1375,11 @@ class TestRoutine(TestBase):
 
         person = self.sample.person("unit")
 
-        # basic 
+        todo = self.sample.todo("unit")
+        self.sample.todo("unit", status="closed")
+        self.sample.todo("test")
+
+        # explicit 
 
         self.assertEqual(service.RoutineAction.build(**{
             "data": {
@@ -1386,6 +1389,7 @@ class TestRoutine(TestBase):
                 "status": "opened",
                 "created": 1,
                 "updated": 2,
+                "todos": True,
                 "tasks": [{}]
             }
         }), {
@@ -1401,9 +1405,18 @@ class TestRoutine(TestBase):
                 "status": "opened",
                 "created": 1,
                 "updated": 2,
-                "tasks": [{
-                    "id": 0
-                }]
+                "todos": True,
+                "tasks": [
+                    {
+                        "id": 0,
+                        "text": "todo it",
+                        "todo": todo.id
+
+                    },
+                    {
+                        "id": 1
+                    }
+                ]
             }
         })
 
@@ -2045,22 +2058,32 @@ class TestTask(TestBase):
         mock_task_notify.assert_called_once()
         mock_routine_notify.assert_called_once()
 
+
+    @unittest.mock.patch("flask.request")
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     @unittest.mock.patch("service.TaskAction.notify")
     @unittest.mock.patch("service.RoutineAction.notify")
-    def test_complete(self, mock_routine_notify, mock_task_notify):
+    @unittest.mock.patch("service.ToDoAction.notify", unittest.mock.MagicMock())
+    def test_complete(self, mock_routine_notify, mock_task_notify, mock_request):
+
+        mock_request.session = self.session
+
+        todo = self.sample.todo("unit")
 
         routine = self.sample.routine("unit", "hey", data={
             "text": "hey",
             "language": "cursing",
             "tasks": [{
-                "text": "do it"
+                "text": "do it",
+                "todo": todo.id
             }]
         })
 
         self.assertTrue(service.TaskAction.complete(routine.data["tasks"][0], routine))
         self.assertTrue(routine.data["tasks"][0]["end"], 7)
         self.assertEqual(routine.status, "closed")
+        item = self.session.query(mysql.ToDo).get(todo.id)
+        self.assertEqual(item.status, "closed")
         mock_task_notify.assert_called_once_with("complete", routine.data["tasks"][0], routine)
         mock_routine_notify.assert_called_once_with("complete", routine)
 
@@ -2068,10 +2091,16 @@ class TestTask(TestBase):
         mock_task_notify.assert_called_once()
         mock_routine_notify.assert_called_once()
     
+    @unittest.mock.patch("flask.request")
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     @unittest.mock.patch("service.TaskAction.notify")
     @unittest.mock.patch("service.RoutineAction.notify")
-    def test_uncomplete(self, mock_routine_notify, mock_task_notify):
+    @unittest.mock.patch("service.ToDoAction.notify", unittest.mock.MagicMock())
+    def test_uncomplete(self, mock_routine_notify, mock_task_notify, mock_request):
+
+        mock_request.session = self.session
+
+        todo = self.sample.todo("unit", status="closed", data={"end": 0})
 
         routine = self.sample.routine("unit", "hey", status="closed", data={
             "text": "hey",
@@ -2079,13 +2108,16 @@ class TestTask(TestBase):
             "end": 0,
             "tasks": [{
                 "text": "do it",
-                "end": 0
+                "end": 0,
+                "todo": todo.id
             }]
         })
 
         self.assertTrue(service.TaskAction.uncomplete(routine.data["tasks"][0], routine))
         self.assertNotIn("end", routine.data["tasks"][0])
         self.assertEqual(routine.status, "opened")
+        item = self.session.query(mysql.ToDo).get(todo.id)
+        self.assertEqual(item.status, "opened")
         mock_task_notify.assert_called_once_with("uncomplete", routine.data["tasks"][0], routine)
         mock_routine_notify.assert_called_once_with("uncomplete", routine)
 
