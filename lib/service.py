@@ -570,12 +570,71 @@ class ToDo:
     order_by = [mysql.ToDo.created.desc()]
 
 class ToDoCL(ToDo, StatusCL):
-    pass
+
+    @require_session
+    def patch(self):
+
+        updated = ToDoAction.todos(flask.request.json["todos"])
+
+        if updated:
+            flask.request.session.commit()
+
+        return {"updated": updated}, 202
 
 class ToDoRUD(ToDo, BaseRUD):
     pass
 
 class ToDoAction(ToDo, BaseAction):
+
+    @staticmethod
+    def todos(data):
+        """
+        Reminds all ToDos
+        """
+
+        if "person" in data:
+            person_id = flask.request.session.query(
+                mysql.Person
+            ).filter_by(
+                name=data["person"]
+            ).one().id
+        else:
+            person_id = data["person_id"]
+
+        person = flask.request.session.query(mysql.Person).get(person_id)
+
+        updated = False
+
+        todos = []
+
+        for todo in flask.request.session.query(
+            mysql.ToDo
+        ).filter_by(
+            person_id=person_id,
+            status="opened"
+        ).order_by(
+            *ToDo.order_by
+        ).all():
+
+            todo.data["notified"] = time.time()
+            todo.updated = time.time()
+            todos.append(todo)
+
+        if todos:
+
+            notify({
+                "kind": "todos",
+                "action": "remind",
+                "person": model_out(person),
+                "speech": data.get("speech", {}),
+                "todos": models_out(todos)
+            })
+
+            flask.request.session.commit()
+
+            updated = True
+
+        return updated
 
     @classmethod
     def complete(cls, model):
