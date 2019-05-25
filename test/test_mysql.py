@@ -17,6 +17,11 @@ class Sample:
 
     def person(self, name):
 
+        people = self.session.query(mysql.Person).filter_by(name=name).all()
+
+        if people:
+            return people[0]
+
         person = mysql.Person(name=name)
         self.session.add(person)
         self.session.commit()

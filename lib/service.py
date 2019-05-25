@@ -624,7 +624,30 @@ class RoutineAction(Routine, BaseAction):
 
         fields = BaseAction.build(**kwargs)
 
+        if fields["data"].get("todos"):
+
+            tasks = []
+
+            for todo in flask.request.session.query(
+                mysql.ToDo
+            ).filter_by(
+                person_id=fields["person_id"],
+                status="opened"
+            ).order_by(
+                *ToDo.order_by
+            ).all():
+                tasks.append({
+                    "text": todo.data["text"],
+                    "todo": todo.id
+                })
+
+            if "tasks" in fields["data"]:
+                tasks.extend(fields["data"]["tasks"])
+            
+            fields["data"]["tasks"] = tasks
+
         if "tasks" in fields["data"]:
+
             for index, task in enumerate(fields["data"]["tasks"]):
                 if "id" not in task:
                     task["id"] = index
@@ -821,6 +844,9 @@ class TaskAction(flask_restful.Resource):
 
             RoutineAction.check(routine)
 
+            if "todo" in task:
+                ToDoAction.complete(flask.request.session.query(mysql.ToDo).get(task["todo"]))
+
             return True
 
         return False
@@ -837,6 +863,9 @@ class TaskAction(flask_restful.Resource):
             cls.notify("uncomplete", task, routine)
 
             RoutineAction.uncomplete(routine)
+
+            if "todo" in task:
+                ToDoAction.uncomplete(flask.request.session.query(mysql.ToDo).get(task["todo"]))
 
             return True
 
