@@ -1095,6 +1095,53 @@ class TestToDo(TestBase):
             "name": "test"
         })
 
+    @unittest.mock.patch("flask.request")
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.notify")
+    def test_todos(self, mock_notify, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+
+        self.sample.todo("unit", status="closed")
+        self.sample.todo("test")
+
+        self.assertFalse(service.ToDoAction.todos({
+            "person": person.name
+        }))
+        mock_notify.assert_not_called()
+
+        todo = self.sample.todo("unit")
+
+        self.assertTrue(service.ToDoAction.todos({
+            "person": person.name
+        }))
+        item = self.session.query(mysql.ToDo).get(todo.id)
+        self.assertEqual(item.updated, 7)
+        self.assertEqual(item.data["notified"], 7)
+        mock_notify.assert_called_once_with({
+            "kind": "todos",
+            "action": "remind",
+            "person": service.model_out(person),
+            "speech": {},
+            "todos": service.models_out([todo])
+        })
+
+        self.assertTrue(service.ToDoAction.todos({
+            "person_id": person.id,
+            "speech": {
+                "language": "cursing"
+            }
+        }))
+        mock_notify.assert_called_with({
+            "kind": "todos",
+            "action": "remind",
+            "person": service.model_out(person),
+            "speech": {"language": "cursing"},
+            "todos": service.models_out([todo])
+        })
+
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     @unittest.mock.patch("service.BaseAction.notify")
     def test_remind(self, mock_notify):
@@ -1266,9 +1313,22 @@ class TestToDo(TestBase):
     @unittest.mock.patch("service.notify", unittest.mock.MagicMock)
     def test_action(self):
 
+        person = self.sample.person("unit")
+
         todo = self.sample.todo("unit", "hey", data={
             "text": "hey"
         })
+
+        # todos
+
+        self.assertStatusValue(self.api.patch(f"/todo", json={
+            "todos": {
+                "person": "unit"
+            }
+        }), 202, "updated", True)
+        item = self.session.query(mysql.ToDo).get(todo.id)
+        self.session.commit()
+        self.assertEqual(item.data["notified"], 7)
 
         # remind
 
