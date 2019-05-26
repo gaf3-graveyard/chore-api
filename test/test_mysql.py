@@ -152,19 +152,21 @@ class TestMySQL(unittest.TestCase):
 
     def test_Person(self):
 
-        self.session.add(mysql.Person(name="unit"))
+        self.session.add(mysql.Person(name="unit", origin="wolverine"))
         self.session.commit()
 
         person = self.session.query(mysql.Person).one()
         self.assertEqual(str(person), "<Person(name='unit')>")
         self.assertEqual(person.name, "unit")
-        
+        self.assertEqual(person.origin, "wolverine")
+
     def test_Template(self):
 
         self.session.add(mysql.Template(
             name='Unit Test',
             kind="routine",
-            data={"a": 1}
+            data={"a": 1},
+            origin="wolverine"
         ))
         self.session.commit()
 
@@ -173,6 +175,7 @@ class TestMySQL(unittest.TestCase):
         self.assertEqual(template.name, "Unit Test")
         self.assertEqual(template.kind, "routine")
         self.assertEqual(template.data, {"a": 1})
+        self.assertEqual(template.origin, "wolverine")
 
         template.data["a"] = 2
         self.session.commit()
@@ -189,7 +192,8 @@ class TestMySQL(unittest.TestCase):
         self.session.add(mysql.Area(
             person_id=person.id,
             name='Unit Test',
-            data={"a": 1}
+            data={"a": 1},
+            origin="wolverine"
         ))
         self.session.commit()
 
@@ -201,6 +205,7 @@ class TestMySQL(unittest.TestCase):
         self.assertEqual(area.created, 7)
         self.assertEqual(area.updated, 7)
         self.assertEqual(area.data, {"a": 1})
+        self.assertEqual(area.origin, "wolverine")
 
         area.data["a"] = 2
         self.session.commit()
@@ -217,7 +222,8 @@ class TestMySQL(unittest.TestCase):
         self.session.add(mysql.Act(
             person_id=person.id,
             name='Unit Test',
-            data={"a": 1}
+            data={"a": 1},
+            origin="wolverine"
         ))
         self.session.commit()
 
@@ -229,6 +235,7 @@ class TestMySQL(unittest.TestCase):
         self.assertEqual(act.created, 7)
         self.assertEqual(act.updated, 7)
         self.assertEqual(act.data, {"a": 1})
+        self.assertEqual(act.origin, "wolverine")
 
         act.data["a"] = 2
         self.session.commit()
@@ -245,7 +252,8 @@ class TestMySQL(unittest.TestCase):
         self.session.add(mysql.ToDo(
             person_id=person.id,
             name='Unit Test',
-            data={"a": 1}
+            data={"a": 1},
+            origin="wolverine"
         ))
         self.session.commit()
 
@@ -257,6 +265,7 @@ class TestMySQL(unittest.TestCase):
         self.assertEqual(todo.created, 7)
         self.assertEqual(todo.updated, 7)
         self.assertEqual(todo.data, {"a": 1})
+        self.assertEqual(todo.origin, "wolverine")
 
         todo.data["a"] = 2
         self.session.commit()
@@ -273,7 +282,8 @@ class TestMySQL(unittest.TestCase):
         self.session.add(mysql.Routine(
             person_id=person.id,
             name='Unit Test',
-            data={"a": 1}
+            data={"a": 1},
+            origin="wolverine"
         ))
         self.session.commit()
 
@@ -285,6 +295,7 @@ class TestMySQL(unittest.TestCase):
         self.assertEqual(routine.created, 7)
         self.assertEqual(routine.updated, 7)
         self.assertEqual(routine.data, {"a": 1})
+        self.assertEqual(routine.origin, "wolverine")
 
         routine.data["a"] = 2
         self.session.commit()

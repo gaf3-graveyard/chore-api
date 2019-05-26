@@ -196,6 +196,7 @@ class TestService(TestBase):
             "data": {
                 "d": 4
             },
+            "origin": None,
             "yaml": yaml.dump({"d": 4}, default_flow_style=False)
         })
 
@@ -220,6 +221,7 @@ class TestService(TestBase):
             "data": {
                 "d": 4
             },
+            "origin": None,
             "yaml": yaml.dump({"d": 4}, default_flow_style=False)
         }])
 

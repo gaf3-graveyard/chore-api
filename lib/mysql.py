@@ -74,6 +74,7 @@ class Person(Base):
     
     id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True, autoincrement=True)
     name = sqlalchemy.Column(sqlalchemy.String(64), nullable=False)
+    origin = sqlalchemy.Column(sqlalchemy.String(64))
 
     sqlalchemy.schema.UniqueConstraint('name', name='label')
 
@@ -94,6 +95,7 @@ class Template(Base):
         ), 
         nullable=False
     )
+    origin = sqlalchemy.Column(sqlalchemy.String(64))
 
     sqlalchemy.schema.UniqueConstraint('name', 'kind', name='label')
 
@@ -117,6 +119,7 @@ class Area(Base):
         ), 
         nullable=False
     )
+    origin = sqlalchemy.Column(sqlalchemy.String(64))
 
     sqlalchemy.schema.UniqueConstraint('name', name='label')
 
@@ -142,6 +145,7 @@ class Act(Base):
         ), 
         nullable=False
     )
+    origin = sqlalchemy.Column(sqlalchemy.String(64))
 
     person = sqlalchemy.orm.relationship("Person") 
 
@@ -167,6 +171,7 @@ class ToDo(Base):
         ), 
         nullable=False
     )
+    origin = sqlalchemy.Column(sqlalchemy.String(64))
 
     person = sqlalchemy.orm.relationship("Person") 
 
@@ -192,6 +197,7 @@ class Routine(Base):
         ), 
         nullable=False
     )
+    origin = sqlalchemy.Column(sqlalchemy.String(64))
 
     person = sqlalchemy.orm.relationship("Person") 
 
