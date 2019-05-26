@@ -630,8 +630,6 @@ class ToDoAction(ToDo, BaseAction):
                 "todos": models_out(todos)
             })
 
-            flask.request.session.commit()
-
             updated = True
 
         return updated
