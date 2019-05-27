@@ -31,7 +31,7 @@ class MySQL(object):
 
 def create_database():
 
-    connection = pymysql.connect(host='host.docker.internal', user='root')
+    connection = pymysql.connect(host=os.environ['MYSQL_HOST'], user='root')
 
     try:
 
@@ -48,7 +48,7 @@ def create_database():
 
 def drop_database():
 
-    connection = pymysql.connect(host='host.docker.internal', user='root')
+    connection = pymysql.connect(host=os.environ['MYSQL_HOST'], user='root')
 
     try:
 
