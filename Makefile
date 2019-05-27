@@ -49,14 +49,14 @@ push:
 
 install:
 	kubectl create -f kubernetes/account.yaml
-	kubectl create -f kubernetes/daemon.yaml
+	kubectl create -f kubernetes/api.yaml
 
 update:
 	kubectl replace -f kubernetes/account.yaml
-	kubectl replace -f kubernetes/daemon.yaml
+	kubectl replace -f kubernetes/api.yaml
 
 remove:
-	-kubectl delete -f kubernetes/daemon.yaml
+	-kubectl delete -f kubernetes/api.yaml
 	-kubectl delete -f kubernetes/account.yaml
 
 reset: remove install
