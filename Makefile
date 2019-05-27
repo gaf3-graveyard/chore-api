@@ -15,7 +15,7 @@ ENVIRONMENT=-e SLEEP=0.1 \
 			-e REDIS_CHANNEL=nandy.io/chore
 PORT=6765
 
-.PHONY: cross build kube network shell test run start stop push install update reset remove
+.PHONY: cross build kube network shell test run start stop push install update remove reset tag
 
 cross:
 	docker run --rm --privileged multiarch/qemu-user-static:register --reset
@@ -60,3 +60,7 @@ remove:
 	-kubectl delete -f kubernetes/account.yaml
 
 reset: remove install
+
+tag:
+	-git tag -a "v$(VERSION)" -m "Version $(VERSION)"
+	git push origin --tags
