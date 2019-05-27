@@ -15,7 +15,7 @@ ENVIRONMENT=-e SLEEP=0.1 \
 			-e REDIS_CHANNEL=nandy.io/chore
 PORT=6765
 
-.PHONY: cross build network shell test run push install update reset remove
+.PHONY: cross build kube network shell test run start stop push install update reset remove
 
 cross:
 	docker run --rm --privileged multiarch/qemu-user-static:register --reset
