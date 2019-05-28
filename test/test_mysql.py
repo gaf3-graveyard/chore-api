@@ -15,23 +15,20 @@ class Sample:
 
         self.session = session
 
-    def person(self, name):
+    def person(self, name, data=None):
 
         people = self.session.query(mysql.Person).filter_by(name=name).all()
 
         if people:
             return people[0]
 
-        person = mysql.Person(name=name)
+        person = mysql.Person(name=name, data=data)
         self.session.add(person)
         self.session.commit()
 
         return person
 
     def template(self, name, kind, data=None):
-
-        if data is None:
-            data = {}
 
         template = mysql.Template(name=name, kind=kind, data=data)
         self.session.add(template)
@@ -40,9 +37,6 @@ class Sample:
         return template
 
     def area(self, person, name, status=None, created=7, updated=8, data=None):
-
-        if data is None:
-            data = {}
 
         area = mysql.Area(
             person_id=self.person(person).id,
@@ -58,9 +52,6 @@ class Sample:
         return area
 
     def act(self, person, name="Unit", status=None, created=7, updated=8, data=None):
-
-        if data is None:
-            data = {}
 
         act = mysql.Act(
             person_id=self.person(person).id,
@@ -152,13 +143,22 @@ class TestMySQL(unittest.TestCase):
 
     def test_Person(self):
 
-        self.session.add(mysql.Person(name="unit"))
+        self.session.add(mysql.Person(
+            name="unit",
+            data={"a": 1}
+        ))
         self.session.commit()
 
         person = self.session.query(mysql.Person).one()
         self.assertEqual(str(person), "<Person(name='unit')>")
         self.assertEqual(person.name, "unit")
-        
+        self.assertEqual(person.data, {"a": 1})
+
+        person.data["a"] = 2
+        self.session.commit()
+        person = self.session.query(mysql.Person).one()
+        self.assertEqual(person.data, {"a": 2})
+
     def test_Template(self):
 
         self.session.add(mysql.Template(

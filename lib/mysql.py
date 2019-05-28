@@ -74,6 +74,13 @@ class Person(Base):
     
     id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True, autoincrement=True)
     name = sqlalchemy.Column(sqlalchemy.String(64), nullable=False)
+    data = sqlalchemy.Column(
+        sqlalchemy.ext.mutable.MutableDict.as_mutable(
+            sqlalchemy_jsonfield.JSONField(enforce_string=True,enforce_unicode=False)
+        ), 
+        nullable=False,
+        default=dict
+    )
 
     sqlalchemy.schema.UniqueConstraint('name', name='label')
 
@@ -92,7 +99,8 @@ class Template(Base):
         sqlalchemy.ext.mutable.MutableDict.as_mutable(
             sqlalchemy_jsonfield.JSONField(enforce_string=True,enforce_unicode=False)
         ), 
-        nullable=False
+        nullable=False,
+        default=dict
     )
 
     sqlalchemy.schema.UniqueConstraint('name', 'kind', name='label')
@@ -115,7 +123,8 @@ class Area(Base):
         sqlalchemy.ext.mutable.MutableDict.as_mutable(
             sqlalchemy_jsonfield.JSONField(enforce_string=True,enforce_unicode=False)
         ), 
-        nullable=False
+        nullable=False,
+        default=dict
     )
 
     sqlalchemy.schema.UniqueConstraint('name', name='label')
@@ -140,7 +149,8 @@ class Act(Base):
         sqlalchemy.ext.mutable.MutableDict.as_mutable(
             sqlalchemy_jsonfield.JSONField(enforce_string=True,enforce_unicode=False)
         ), 
-        nullable=False
+        nullable=False,
+        default=dict
     )
 
     person = sqlalchemy.orm.relationship("Person") 
@@ -165,7 +175,8 @@ class ToDo(Base):
         sqlalchemy.ext.mutable.MutableDict.as_mutable(
             sqlalchemy_jsonfield.JSONField(enforce_string=True,enforce_unicode=False)
         ), 
-        nullable=False
+        nullable=False,
+        default=dict
     )
 
     person = sqlalchemy.orm.relationship("Person") 
@@ -190,7 +201,8 @@ class Routine(Base):
         sqlalchemy.ext.mutable.MutableDict.as_mutable(
             sqlalchemy_jsonfield.JSONField(enforce_string=True,enforce_unicode=False)
         ), 
-        nullable=False
+        nullable=False,
+        default=dict
     )
 
     person = sqlalchemy.orm.relationship("Person") 
