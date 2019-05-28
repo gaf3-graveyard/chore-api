@@ -248,12 +248,14 @@ class TestPerson(TestBase):
 
         response = self.api.post("/person", json={
             "person": {
-                "name": "unit"
+                "name": "unit",
+                "data": {"a": 1}
             }
         })
 
         self.assertStatusModel(response, 201, "person", {
-            "name": "unit"
+            "name": "unit",
+            "data": {"a": 1}
         })
 
         person_id = response.json["person"]["id"]
