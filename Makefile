@@ -15,7 +15,7 @@ ENVIRONMENT=-e SLEEP=0.1 \
 			-e REDIS_CHANNEL=nandy.io/chore
 PORT=6765
 
-.PHONY: cross build kube network shell test run start stop push install update remove reset tag
+.PHONY: cross build kube network shell test db run start stop push install update remove reset tag
 
 cross:
 	docker run --rm --privileged multiarch/qemu-user-static:register --reset
@@ -34,6 +34,9 @@ shell: kube network
 
 test: network
 	docker run -it --network=$(NETWORK) $(VOLUMES) $(ENVIRONMENT) $(ACCOUNT)/$(IMAGE):$(VERSION) sh -c "coverage run -m unittest discover -v test && coverage report -m --include 'lib/*.py'"
+
+db:
+	docker run -it --network=$(NETWORK) $(VOLUMES) $(ENVIRONMENT) $(ACCOUNT)/$(IMAGE):$(VERSION) sh -c "bin/db.py"
 
 run: kube network
 	docker run --rm --name=$(NAME) --network=$(NETWORK) $(VOLUMES) $(ENVIRONMENT) -p 127.0.0.1:$(PORT):80 --expose=80 $(ACCOUNT)/$(IMAGE):$(VERSION)
