@@ -28,7 +28,7 @@ class MockRedis(object):
         self.channel = channel
         self.messages.append(message)
 
-class TestBase(unittest.TestCase):
+class TestRest(unittest.TestCase):
 
     maxDiff = None
 
@@ -67,6 +67,22 @@ class TestBase(unittest.TestCase):
         self.assertEqual(response.status_code, code, response.json)
         self.assertEqual(response.json[key], value)
 
+    def assertStatusFields(self, response, code, fields, errors=None):
+
+        self.assertEqual(response.status_code, code, response.json)
+
+        self.assertEqual(len(fields), len(response.json['fields']), "fields")
+
+        for index, field in enumerate(fields):
+            self.assertEqual(field, response.json['fields'][index], index)
+
+        if errors or "errors" in response.json:
+
+            self.assertIsNotNone(errors, response.json)
+            self.assertIn("errors", response.json, response.json)
+
+            self.assertEqual(errors, response.json['errors'], "errors")
+
     def assertStatusModel(self, response, code, key, model):
 
         self.assertEqual(response.status_code, code, response.json)
@@ -83,7 +99,7 @@ class TestBase(unittest.TestCase):
                 self.assertEqual(response.json[key][index][field], model[field], f"{index} {field}")
 
 
-class TestService(TestBase):
+class TestService(TestRest):
 
     @unittest.mock.patch.dict(os.environ, {
         "REDIS_HOST": "most.com",
@@ -235,16 +251,111 @@ class TestService(TestBase):
         self.assertEqual(self.app.redis.messages, ['{"a": 1}'])
 
 
-class TestHealth(TestBase):
+class TestHealth(TestRest):
 
     def test_health(self):
 
         self.assertEqual(self.api.get("/health").json, {"message": "OK"})
 
 
-class TestPerson(TestBase):
+class TestPerson(TestRest):
+    
+    @unittest.mock.patch("flask.request")
+    def test_choices(self, mock_request):
 
-    def test_create(self):
+        mock_request.session = self.session
+
+        unit = self.sample.person("unit")
+        test = self.sample.person("test")
+
+        (ids, labels) = service.Person.choices()
+
+        self.assertEqual(ids, [test.id, unit.id])
+        self.assertEqual(labels, {test.id: "test", unit.id: "unit"})
+
+class TestPersonCL(TestRest):
+
+    def test_fields(self):
+        
+        self.assertEqual(service.PersonCL.fields().to_list(), [
+            {
+                "name": "name"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "optional": True
+            }
+        ])
+
+    def test_validate(self):
+
+        fields = service.PersonCL.fields()
+
+        self.assertFalse(service.PersonCL.validate(fields))
+
+        self.assertEqual(fields.to_list(), [
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "optional": True
+            }
+        ])
+
+    def test_options(self):
+
+        response = self.api.options("/person")
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "name"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "optional": True
+            }
+        ])
+
+        response = self.api.options("/person", json={"person": {
+            "nope": "bad"
+        }})
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "optional": True
+            }
+        ], [
+            "unknown field 'nope'"
+        ])
+
+        response = self.api.options("/person", json={"person": {
+            "name": "yup"
+        }})
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "name",
+                "value": "yup"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "optional": True
+            }
+        ])
+
+    def test_post(self):
 
         response = self.api.post("/person", json={
             "person": {
@@ -260,7 +371,7 @@ class TestPerson(TestBase):
 
         person_id = response.json["person"]["id"]
 
-    def test_list(self):
+    def test_get(self):
 
         self.sample.person("unit")
         self.sample.person("test")
@@ -274,7 +385,57 @@ class TestPerson(TestBase):
             }
         ])
 
-    def test_retrieve(self):
+class TestPersonRUD(TestRest):
+
+    def test_fields(self):
+        
+        self.assertEqual(service.PersonRUD.fields().to_list(), [
+            {
+                "name": "id",
+                "readonly": True
+            },
+            {
+                "name": "name"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "optional": True
+            }
+        ])
+
+    def test_validate(self):
+
+        fields = service.PersonRUD.fields()
+
+        self.assertFalse(service.PersonRUD.validate(fields))
+
+        self.assertEqual(fields.to_list(), [
+            {
+                "name": "id",
+                "readonly": True
+            },
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "optional": True
+            }
+        ])
+
+    @unittest.mock.patch("flask.request")
+    def test_retrieve(self, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+
+        self.assertEqual(service.PersonRUD.retrieve(person.id).name, "unit")
+
+    def test_get(self):
 
         person = self.sample.person("unit")
 
@@ -282,7 +443,84 @@ class TestPerson(TestBase):
             "name": "unit"
         })
 
-    def test_update(self):
+    def test_options(self):
+
+        person = self.sample.person("unit")
+
+        response = self.api.options(f"/person/{person.id}")
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "id",
+                "value": person.id,
+                "original": person.id,
+                "readonly": True
+            },
+            {
+                "name": "name",
+                "value": "unit",
+                "original": "unit"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "optional": True,
+                "value": '{}\n',
+                "original": '{}\n'
+            }
+        ])
+
+        response = self.api.options(f"/person/{person.id}", json={"person": {
+            "nope": "bad"
+        }})
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "id",
+                "value": person.id,
+                "original": person.id,
+                "readonly": True
+            },
+            {
+                "name": "name",
+                "original": "unit",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "optional": True,
+                "original": '{}\n'
+            }
+        ], [
+            "unknown field 'nope'"
+        ])
+
+        response = self.api.options(f"/person/{person.id}", json={"person": {
+            "name": "yup"
+        }})
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "id",
+                "value": person.id,
+                "original": person.id,
+                "readonly": True
+            },
+            {
+                "name": "name",
+                "value": "yup",
+                "original": "unit"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "optional": True,
+                "original": '{}\n'
+            }
+        ])
+
+    def test_patch(self):
 
         person = self.sample.person("unit")
 
@@ -305,9 +543,160 @@ class TestPerson(TestBase):
         self.assertStatusModels(self.api.get("/person"), 200, "persons", [])
 
 
-class TestTemplate(TestBase):
+class TestTemplate(TestRest):
 
-    def test_create(self):
+    @unittest.mock.patch("flask.request")
+    def test_choices(self, mock_request):
+
+        mock_request.session = self.session
+
+        unit = self.sample.template("unit", "todo")
+        test = self.sample.template("test", "act")
+        rest = self.sample.template("rest", "todo")
+
+        (ids, labels) = service.Template.choices("todo")
+
+        self.assertEqual(ids, [0, rest.id, unit.id])
+        self.assertEqual(labels, {0: "None", rest.id: "rest", unit.id: "unit"})
+
+class TestTemplateCL(TestRest):
+
+    def test_fields(self):
+        
+        self.assertEqual(service.TemplateCL.fields().to_list(), [
+            {
+                "name": "name"
+            },
+            {
+                "name": "kind",
+                "options": [
+                    "area",
+                    "act",
+                    "todo",
+                    "routine"
+                ],
+                "style": "radios"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea"
+            }
+        ])
+
+    def test_validate(self):
+
+        fields = service.TemplateCL.fields()
+
+        self.assertFalse(service.TemplateCL.validate(fields))
+
+        self.assertEqual(fields.to_list(), [
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "kind",
+                "options": [
+                    "area",
+                    "act",
+                    "todo",
+                    "routine"
+                ],
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "errors": ["missing value"]
+            }
+        ])
+
+        self.assertEqual(fields.errors, [])
+
+    def test_options(self):
+
+        response = self.api.options("/template")
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "name"
+            },
+            {
+                "name": "kind",
+                "options": [
+                    "area",
+                    "act",
+                    "todo",
+                    "routine"
+                ],
+                "style": "radios"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea"
+            }
+        ])
+
+        response = self.api.options("/template", json={"template": {
+            "nope": "bad"
+        }})
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "kind",
+                "options": [
+                    "area",
+                    "act",
+                    "todo",
+                    "routine"
+                ],
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "errors": ["missing value"]
+            }
+        ], [
+            "unknown field 'nope'"
+        ])
+
+        response = self.api.options("/template", json={"template": {
+            "name": "yup",
+            "kind": "act",
+            "yaml": '"a": 1'
+        }})
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "name",
+                "value": "yup"
+            },
+            {
+                "name": "kind",
+                "options": [
+                    "area",
+                    "act",
+                    "todo",
+                    "routine"
+                ],
+                "style": "radios",
+                "value": "act"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "value": '"a": 1'
+            }
+        ])
+
+    def test_post(self):
 
         response = self.api.post("/template", json={
             "template": {
@@ -323,7 +712,7 @@ class TestTemplate(TestBase):
             "data": {"a": 1}
         })
 
-    def test_list(self):
+    def test_get(self):
 
         self.sample.template("unit", "todo")
         self.sample.template("test", "act")
@@ -337,7 +726,79 @@ class TestTemplate(TestBase):
             }
         ])
 
-    def test_retrieve(self):
+class TestTemplateRUD(TestRest):
+
+    def test_fields(self):
+        
+        self.assertEqual(service.TemplateRUD.fields().to_list(), [
+            {
+                "name": "id",
+                "readonly": True
+            },
+            {
+                "name": "name"
+            },
+            {
+                "name": "kind",
+                "options": [
+                    "area",
+                    "act",
+                    "todo",
+                    "routine"
+                ],
+                "style": "radios"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea"
+            }
+        ])
+
+    def test_validate(self):
+
+        fields = service.TemplateRUD.fields()
+
+        self.assertFalse(service.TemplateRUD.validate(fields))
+
+        self.assertEqual(fields.to_list(), [
+            {
+                "name": "id",
+                "readonly": True
+            },
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "kind",
+                "options": [
+                    "area",
+                    "act",
+                    "todo",
+                    "routine"
+                ],
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "errors": ["missing value"]
+            }
+        ])
+
+        self.assertEqual(fields.errors, [])
+
+    @unittest.mock.patch("flask.request")
+    def test_retrieve(self, mock_request):
+
+        mock_request.session = self.session
+
+        template = self.sample.template("unit", "todo", {"a": 1})
+
+        self.assertEqual(service.TemplateRUD.retrieve(template.id).name, "unit")
+
+    def test_get(self):
 
         template = self.sample.template("unit", "todo", {"a": 1})
 
@@ -348,7 +809,121 @@ class TestTemplate(TestBase):
             "yaml": "a: 1\n"
         })
 
-    def test_update(self):
+    def test_options(self):
+
+        template = self.sample.template("unit", "todo", {"a": 1})
+
+        response = self.api.options(f"/template/{template.id}")
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "id",
+                "readonly": True,
+                "value": template.id,
+                "original": template.id
+            },
+            {
+                "name": "name",
+                "value": "unit",
+                "original": "unit"
+            },
+            {
+                "name": "kind",
+                "options": [
+                    "area",
+                    "act",
+                    "todo",
+                    "routine"
+                ],
+                "style": "radios",
+                "value": "todo",
+                "original": "todo"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "value": "a: 1\n",
+                "original": "a: 1\n"
+            }
+        ])
+
+        response = self.api.options(f"/template/{template.id}", json={"template": {
+            "nope": "bad"
+        }})
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "id",
+                "readonly": True,
+                "value": template.id,
+                "original": template.id
+            },
+            {
+                "name": "name",
+                "original": "unit",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "kind",
+                "options": [
+                    "area",
+                    "act",
+                    "todo",
+                    "routine"
+                ],
+                "style": "radios",
+                "original": "todo",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "original": "a: 1\n",
+                "errors": ["missing value"]
+            }
+        ], [
+            "unknown field 'nope'"
+        ])
+
+        response = self.api.options(f"/template/{template.id}", json={"template": {
+            "name": "yup",
+            "kind": "act",
+            "yaml": 'b: 2'
+        }})
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "id",
+                "readonly": True,
+                "value": template.id,
+                "original": template.id
+            },
+            {
+                "name": "name",
+                "value": "yup",
+                "original": "unit"
+            },
+            {
+                "name": "kind",
+                "options": [
+                    "area",
+                    "act",
+                    "todo",
+                    "routine"
+                ],
+                "style": "radios",
+                "value": "act",
+                "original": "todo"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "value": "b: 2",
+                "original": "a: 1\n"
+            }
+        ])
+
+    def test_patch(self):
 
         template = self.sample.template("unit", "todo", {"a": 1})
 
@@ -373,7 +948,604 @@ class TestTemplate(TestBase):
         self.assertStatusModels(self.api.get("/template"), 200, "templates", [])
 
 
-class TestArea(TestBase):
+class TestAreaCL(TestRest):
+
+    @unittest.mock.patch("flask.request")
+    def test_fields(self, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+        template = self.sample.template("test", "area", {"a": 1})
+
+        self.assertEqual(service.AreaCL.fields().to_list(), [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios"
+            },
+            {
+                "name": "status",
+                "options": ['positive', 'negative'],
+                "style": "radios"
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {0: "None", template.id: "test"},
+                "style": "select",
+                "trigger": True
+            },
+            {
+                "name": "name"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea"
+            }
+        ])
+
+        self.assertEqual(service.AreaCL.fields({"template_id": template.id}).to_list(), [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios"
+            },
+            {
+                "name": "status",
+                "options": ['positive', 'negative'],
+                "style": "radios"
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {0: "None", template.id: "test"},
+                "style": "select",
+                "trigger": True,
+                "value": template.id
+            },
+            {
+                "name": "name",
+                "value": "test",
+                "readonly": True
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "value": "a: 1\n",
+                "readonly": True
+            }
+        ])
+
+    @unittest.mock.patch("flask.request")
+    def test_validate(self, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+        template = self.sample.template("test", "area", {"a": 1})
+
+        fields = service.AreaCL.fields()
+
+        self.assertFalse(service.AreaCL.validate(fields))
+
+        self.assertEqual(fields.to_list(), [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "status",
+                "options": ['positive', 'negative'],
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {0: "None", template.id: "test"},
+                "style": "select",
+                "trigger": True,
+                "errors": ["missing value"]
+            },
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "errors": ["missing value"]
+            }
+        ])
+
+        self.assertEqual(fields.errors, [])
+
+    def test_options(self):
+
+        person = self.sample.person("unit")
+        template = self.sample.template("test", "area", {"a": 1})
+
+        response = self.api.options("/area")
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {str(person.id): "unit"},
+                "style": "radios"
+            },
+            {
+                "name": "status",
+                "options": ['positive', 'negative'],
+                "style": "radios"
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {'0': "None", str(template.id): "test"},
+                "style": "select",
+                "trigger": True
+            },
+            {
+                "name": "name"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea"
+            }
+        ])
+
+        response = self.api.options("/area", json={"area": {
+            "nope": "bad"
+        }})
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {str(person.id): "unit"},
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "status",
+                "options": ['positive', 'negative'],
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {'0': "None", str(template.id): "test"},
+                "style": "select",
+                "trigger": True,
+                "errors": ["missing value"]
+            },
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "errors": ["missing value"]
+            }
+        ], [
+            "unknown field 'nope'"
+        ])
+
+        response = self.api.options("/area", json={"area": {
+            "person_id": person.id,
+            "status": "positive",
+            "template_id": template.id
+        }})
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {str(person.id): "unit"},
+                "style": "radios",
+                "value": person.id
+            },
+            {
+                "name": "status",
+                "options": ['positive', 'negative'],
+                "style": "radios",
+                "value": "positive"
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {'0': "None", str(template.id): "test"},
+                "style": "select",
+                "trigger": True,
+                "value": template.id
+            },
+            {
+                "name": "name",
+                "value": "test",
+                "readonly": True
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "value": "a: 1\n",
+                "readonly": True
+            }
+        ])
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    def test_post(self):
+
+        person = self.sample.person("unit")
+
+        response = self.api.post("/area", json={
+            "area": {
+                "person_id": person.id,
+                "name": "unit",
+                "status": "negative",
+                "data": {
+                    "a": 1
+                }
+            }
+        })
+
+        self.assertStatusModel(response, 201, "area", {
+            "person_id": person.id,
+            "name": "unit",
+            "status": "negative",
+            "data": {
+                "a": 1,
+                "notified": 7
+            }
+        })
+
+        area_id = response.json["area"]["id"]
+
+    def test_get(self):
+
+        self.sample.area("unit", "test")
+        self.sample.area("test", "unit")
+
+        self.assertStatusModels(self.api.get("/area"), 200, "areas", [
+            {
+                "name": "test"
+            },
+            {
+                "name": "unit"
+            }
+        ])
+
+class TestAreaRUD(TestRest):
+
+    @unittest.mock.patch("flask.request")
+    def test_fields(self, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+
+        self.assertEqual(service.AreaRUD.fields().to_list(), [
+            {
+                "name": "id",
+                "readonly": True
+            },
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios"
+            },
+            {
+                "name": "status",
+                "options": ['positive', 'negative'],
+                "style": "radios"
+            },
+            {
+                "name": "name"
+            },
+            {
+                "name": "created",
+                "style": "datetime",
+                "readonly": True
+            },
+            {
+                "name": "updated",
+                "style": "datetime",
+                "readonly": True
+            },
+            {
+                "name": "yaml",
+                "style": "textarea"
+            }
+        ])
+
+    @unittest.mock.patch("flask.request")
+    def test_validate(self, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+
+        fields = service.AreaRUD.fields()
+
+        self.assertFalse(service.AreaRUD.validate(fields))
+
+        self.assertEqual(fields.to_list(), [
+            {
+                "name": "id",
+                "readonly": True
+            },
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "status",
+                "options": ['positive', 'negative'],
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "created",
+                "style": "datetime",
+                "readonly": True
+            },
+            {
+                "name": "updated",
+                "style": "datetime",
+                "readonly": True
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "errors": ["missing value"]
+            }
+        ])
+
+        self.assertEqual(fields.errors, [])
+
+    @unittest.mock.patch("flask.request")
+    def test_retrieve(self, mock_request):
+
+        mock_request.session = self.session
+
+        area = self.sample.area("unit", "test")
+
+        self.assertEqual(service.AreaRUD.retrieve(area.id).name, "test")
+
+    def test_get(self):
+
+        area = self.sample.area("unit", "test")
+
+        self.assertStatusModel(self.api.get(f"/area/{area.id}"), 200, "area", {
+            "name": "test"
+        })
+
+    def test_options(self):
+
+        unit = self.sample.person("unit")
+        area = self.sample.area("unit", "test", status="positive", data={"a": 1})
+
+        response = self.api.options(f"/area/{area.id}")
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "id",
+                "readonly": True,
+                "value": area.id,
+                "original": area.id
+            },
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [unit.id],
+                "labels": {str(unit.id): "unit"},
+                "style": "radios",
+                "value": unit.id,
+                "original": unit.id
+            },
+            {
+                "name": "status",
+                "options": ['positive', 'negative'],
+                "style": "radios",
+                "value": "positive",
+                "original": "positive"
+            },
+            {
+                "name": "name",
+                "value": "test",
+                "original": "test"
+            },
+            {
+                "name": "created",
+                "style": "datetime",
+                "readonly": True,
+                "value": 7,
+                "original": 7
+            },
+            {
+                "name": "updated",
+                "style": "datetime",
+                "readonly": True,
+                "value": 8,
+                "original": 8
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "value": "a: 1\n",
+                "original": "a: 1\n"
+            }
+        ])
+
+        response = self.api.options(f"/area/{area.id}", json={"area": {
+            "nope": "bad"
+        }})
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "id",
+                "readonly": True,
+                "value": area.id,
+                "original": area.id
+            },
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [unit.id],
+                "labels": {str(unit.id): "unit"},
+                "style": "radios",
+                "original": unit.id,
+                "errors": ["missing value"]
+            },
+            {
+                "name": "status",
+                "options": ['positive', 'negative'],
+                "style": "radios",
+                "original": "positive",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "name",
+                "original": "test",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "created",
+                "style": "datetime",
+                "readonly": True,
+                "value": 7,
+                "original": 7
+            },
+            {
+                "name": "updated",
+                "style": "datetime",
+                "readonly": True,
+                "value": 8,
+                "original": 8
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "original": "a: 1\n",
+                "errors": ["missing value"]
+            }
+        ], [
+            "unknown field 'nope'"
+        ])
+
+        test = self.sample.person("test")
+
+        response = self.api.options(f"/area/{area.id}", json={"area": {
+            "person_id": test.id,
+            "name": "yup",
+            "status": "negative",
+            "yaml": 'b: 2'
+        }})
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "id",
+                "readonly": True,
+                "value": area.id,
+                "original": area.id
+            },
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [test.id, unit.id],
+                "labels": {str(test.id): "test", str(unit.id): "unit"},
+                "style": "radios",
+                "original": unit.id,
+                "value": test.id
+            },
+            {
+                "name": "status",
+                "options": ['positive', 'negative'],
+                "style": "radios",
+                "original": "positive",
+                "value": "negative"
+            },
+            {
+                "name": "name",
+                "original": "test",
+                "value": "yup"
+            },
+            {
+                "name": "created",
+                "style": "datetime",
+                "readonly": True,
+                "value": 7,
+                "original": 7
+            },
+            {
+                "name": "updated",
+                "style": "datetime",
+                "readonly": True,
+                "value": 8,
+                "original": 8
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "original": "a: 1\n",
+                "value": "b: 2"
+            }
+        ])
+
+    def test_patch(self):
+
+        area = self.sample.area("unit", "test")
+
+        self.assertStatusValue(self.api.patch(f"/area/{area.id}", json={
+            "area": {
+                "status": "negative"
+            }
+        }), 202, "updated", 1)
+
+        self.assertStatusModel(self.api.get(f"/area/{area.id}"), 200, "area", {
+            "name": "test",
+            "status": "negative"
+        })
+
+    def test_delete(self):
+
+        area = self.sample.area("unit", "test")
+
+        self.assertStatusValue(self.api.delete(f"/area/{area.id}"), 202, "deleted", 1)
+
+        self.assertStatusModels(self.api.get("/area"), 200, "areas", [])
+
+class TestAreaValue(TestRest):
 
     @unittest.mock.patch("flask.request")
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
@@ -504,59 +1676,9 @@ class TestArea(TestBase):
             "person": service.model_out(model.person)
         })
 
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    def test_post(self):
-
-        person = self.sample.person("unit")
-
-        response = self.api.post("/area", json={
-            "area": {
-                "person_id": person.id,
-                "name": "unit",
-                "status": "negative",
-                "data": {
-                    "a": 1
-                }
-            }
-        })
-
-        self.assertStatusModel(response, 201, "area", {
-            "person_id": person.id,
-            "name": "unit",
-            "status": "negative",
-            "data": {
-                "a": 1,
-                "notified": 7
-            }
-        })
-
-        area_id = response.json["area"]["id"]
-
-    def test_list(self):
-
-        self.sample.area("unit", "test")
-        self.sample.area("test", "unit")
-
-        self.assertStatusModels(self.api.get("/area"), 200, "areas", [
-            {
-                "name": "test"
-            },
-            {
-                "name": "unit"
-            }
-        ])
-
-    def test_retrieve(self):
-
-        area = self.sample.area("unit", "test")
-
-        self.assertStatusModel(self.api.get(f"/area/{area.id}"), 200, "area", {
-            "name": "test"
-        })
-
     @unittest.mock.patch("flask.request")
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.BaseStatus.notify")
+    @unittest.mock.patch("service.Status.notify")
     def test_wrong(self, mock_notify, mock_request):
 
         mock_request.session = self.session
@@ -584,7 +1706,7 @@ class TestArea(TestBase):
         self.assertEqual(mock_notify.call_count, 2)
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.BaseStatus.notify")
+    @unittest.mock.patch("service.Status.notify")
     def test_right(self, mock_notify):
 
         model = self.sample.area("unit", "hey", status="negative")
@@ -598,7 +1720,7 @@ class TestArea(TestBase):
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     @unittest.mock.patch("service.notify", unittest.mock.MagicMock)
-    def test_action(self):
+    def test_patch(self):
 
         model = self.sample.area("unit", "hey")
 
@@ -618,31 +1740,604 @@ class TestArea(TestBase):
         self.assertEqual(item.status, "positive")
         self.assertStatusValue(self.api.patch(f"/area/{model.id}/right"), 202, "updated", False)
 
-    def test_update(self):
 
-        area = self.sample.area("unit", "test")
+class TestActCL(TestRest):
 
-        self.assertStatusValue(self.api.patch(f"/area/{area.id}", json={
-            "area": {
+    @unittest.mock.patch("flask.request")
+    def test_fields(self, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+        template = self.sample.template("test", "act", {"a": 1})
+
+        self.assertEqual(service.ActCL.fields().to_list(), [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios"
+            },
+            {
+                "name": "status",
+                "options": ['positive', 'negative'],
+                "style": "radios"
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {0: "None", template.id: "test"},
+                "style": "select",
+                "trigger": True
+            },
+            {
+                "name": "name"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea"
+            }
+        ])
+
+        self.assertEqual(service.ActCL.fields({"template_id": template.id}).to_list(), [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios"
+            },
+            {
+                "name": "status",
+                "options": ['positive', 'negative'],
+                "style": "radios"
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {0: "None", template.id: "test"},
+                "style": "select",
+                "trigger": True,
+                "value": template.id
+            },
+            {
+                "name": "name",
+                "value": "test",
+                "readonly": True
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "value": "a: 1\n",
+                "readonly": True
+            }
+        ])
+
+    @unittest.mock.patch("flask.request")
+    def test_validate(self, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+        template = self.sample.template("test", "act", {"a": 1})
+
+        fields = service.ActCL.fields()
+
+        self.assertFalse(service.ActCL.validate(fields))
+
+        self.assertEqual(fields.to_list(), [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "status",
+                "options": ['positive', 'negative'],
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {0: "None", template.id: "test"},
+                "style": "select",
+                "trigger": True,
+                "errors": ["missing value"]
+            },
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "errors": ["missing value"]
+            }
+        ])
+
+        self.assertEqual(fields.errors, [])
+
+    def test_options(self):
+
+        person = self.sample.person("unit")
+        template = self.sample.template("test", "act", {"a": 1})
+
+        response = self.api.options("/act")
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {str(person.id): "unit"},
+                "style": "radios"
+            },
+            {
+                "name": "status",
+                "options": ['positive', 'negative'],
+                "style": "radios"
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {'0': "None", str(template.id): "test"},
+                "style": "select",
+                "trigger": True
+            },
+            {
+                "name": "name"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea"
+            }
+        ])
+
+        response = self.api.options("/act", json={"act": {
+            "nope": "bad"
+        }})
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {str(person.id): "unit"},
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "status",
+                "options": ['positive', 'negative'],
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {'0': "None", str(template.id): "test"},
+                "style": "select",
+                "trigger": True,
+                "errors": ["missing value"]
+            },
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "errors": ["missing value"]
+            }
+        ], [
+            "unknown field 'nope'"
+        ])
+
+        response = self.api.options("/act", json={"act": {
+            "person_id": person.id,
+            "status": "positive",
+            "template_id": template.id
+        }})
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {str(person.id): "unit"},
+                "style": "radios",
+                "value": person.id
+            },
+            {
+                "name": "status",
+                "options": ['positive', 'negative'],
+                "style": "radios",
+                "value": "positive"
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {'0': "None", str(template.id): "test"},
+                "style": "select",
+                "trigger": True,
+                "value": template.id
+            },
+            {
+                "name": "name",
+                "value": "test",
+                "readonly": True
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "value": "a: 1\n",
+                "readonly": True
+            }
+        ])
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    def test_post(self):
+
+        person = self.sample.person("unit")
+
+        response = self.api.post("/act", json={
+            "act": {
+                "person_id": person.id,
+                "name": "unit",
+                "status": "negative",
+                "data": {
+                    "a": 1
+                }
+            }
+        })
+
+        self.assertStatusModel(response, 201, "act", {
+            "person_id": person.id,
+            "name": "unit",
+            "status": "negative",
+            "data": {
+                "a": 1,
+                "notified": 7
+            }
+        })
+
+        act_id = response.json["act"]["id"]
+
+    def test_get(self):
+
+        self.sample.act("unit", "test")
+        self.sample.act("test", "unit")
+
+        self.assertStatusModels(self.api.get("/act"), 200, "acts", [
+            {
+                "name": "test"
+            },
+            {
+                "name": "unit"
+            }
+        ])
+
+class TestActRUD(TestRest):
+    @unittest.mock.patch("flask.request")
+    def test_fields(self, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+
+        self.assertEqual(service.ActRUD.fields().to_list(), [
+            {
+                "name": "id",
+                "readonly": True
+            },
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios"
+            },
+            {
+                "name": "status",
+                "options": ['positive', 'negative'],
+                "style": "radios"
+            },
+            {
+                "name": "name"
+            },
+            {
+                "name": "created",
+                "style": "datetime",
+                "readonly": True
+            },
+            {
+                "name": "updated",
+                "style": "datetime",
+                "readonly": True
+            },
+            {
+                "name": "yaml",
+                "style": "textarea"
+            }
+        ])
+
+    @unittest.mock.patch("flask.request")
+    def test_validate(self, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+
+        fields = service.ActRUD.fields()
+
+        self.assertFalse(service.ActRUD.validate(fields))
+
+        self.assertEqual(fields.to_list(), [
+            {
+                "name": "id",
+                "readonly": True
+            },
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "status",
+                "options": ['positive', 'negative'],
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "created",
+                "style": "datetime",
+                "readonly": True
+            },
+            {
+                "name": "updated",
+                "style": "datetime",
+                "readonly": True
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "errors": ["missing value"]
+            }
+        ])
+
+        self.assertEqual(fields.errors, [])
+
+    @unittest.mock.patch("flask.request")
+    def test_retrieve(self, mock_request):
+
+        mock_request.session = self.session
+
+        act = self.sample.act("unit", "test")
+
+        self.assertEqual(service.ActRUD.retrieve(act.id).name, "test")
+
+    def test_get(self):
+
+        act = self.sample.act("unit", "test")
+
+        self.assertStatusModel(self.api.get(f"/act/{act.id}"), 200, "act", {
+            "name": "test"
+        })
+
+    def test_options(self):
+
+        unit = self.sample.person("unit")
+        act = self.sample.act("unit", "test", status="positive", data={"a": 1})
+
+        response = self.api.options(f"/act/{act.id}")
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "id",
+                "readonly": True,
+                "value": act.id,
+                "original": act.id
+            },
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [unit.id],
+                "labels": {str(unit.id): "unit"},
+                "style": "radios",
+                "value": unit.id,
+                "original": unit.id
+            },
+            {
+                "name": "status",
+                "options": ['positive', 'negative'],
+                "style": "radios",
+                "value": "positive",
+                "original": "positive"
+            },
+            {
+                "name": "name",
+                "value": "test",
+                "original": "test"
+            },
+            {
+                "name": "created",
+                "style": "datetime",
+                "readonly": True,
+                "value": 7,
+                "original": 7
+            },
+            {
+                "name": "updated",
+                "style": "datetime",
+                "readonly": True,
+                "value": 8,
+                "original": 8
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "value": "a: 1\n",
+                "original": "a: 1\n"
+            }
+        ])
+
+        response = self.api.options(f"/act/{act.id}", json={"act": {
+            "nope": "bad"
+        }})
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "id",
+                "readonly": True,
+                "value": act.id,
+                "original": act.id
+            },
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [unit.id],
+                "labels": {str(unit.id): "unit"},
+                "style": "radios",
+                "original": unit.id,
+                "errors": ["missing value"]
+            },
+            {
+                "name": "status",
+                "options": ['positive', 'negative'],
+                "style": "radios",
+                "original": "positive",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "name",
+                "original": "test",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "created",
+                "style": "datetime",
+                "readonly": True,
+                "value": 7,
+                "original": 7
+            },
+            {
+                "name": "updated",
+                "style": "datetime",
+                "readonly": True,
+                "value": 8,
+                "original": 8
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "original": "a: 1\n",
+                "errors": ["missing value"]
+            }
+        ], [
+            "unknown field 'nope'"
+        ])
+
+        test = self.sample.person("test")
+
+        response = self.api.options(f"/act/{act.id}", json={"act": {
+            "person_id": test.id,
+            "name": "yup",
+            "status": "negative",
+            "yaml": 'b: 2'
+        }})
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "id",
+                "readonly": True,
+                "value": act.id,
+                "original": act.id
+            },
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [test.id, unit.id],
+                "labels": {str(test.id): "test", str(unit.id): "unit"},
+                "style": "radios",
+                "original": unit.id,
+                "value": test.id
+            },
+            {
+                "name": "status",
+                "options": ['positive', 'negative'],
+                "style": "radios",
+                "original": "positive",
+                "value": "negative"
+            },
+            {
+                "name": "name",
+                "original": "test",
+                "value": "yup"
+            },
+            {
+                "name": "created",
+                "style": "datetime",
+                "readonly": True,
+                "value": 7,
+                "original": 7
+            },
+            {
+                "name": "updated",
+                "style": "datetime",
+                "readonly": True,
+                "value": 8,
+                "original": 8
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "original": "a: 1\n",
+                "value": "b: 2"
+            }
+        ])
+
+    def test_patch(self):
+
+        act = self.sample.act("unit", "test")
+
+        self.assertStatusValue(self.api.patch(f"/act/{act.id}", json={
+            "act": {
                 "status": "negative"
             }
         }), 202, "updated", 1)
 
-        self.assertStatusModel(self.api.get(f"/area/{area.id}"), 200, "area", {
+        self.assertStatusModel(self.api.get(f"/act/{act.id}"), 200, "act", {
             "name": "test",
             "status": "negative"
         })
 
     def test_delete(self):
 
-        area = self.sample.area("unit", "test")
+        act = self.sample.act("unit", "test")
 
-        self.assertStatusValue(self.api.delete(f"/area/{area.id}"), 202, "deleted", 1)
+        self.assertStatusValue(self.api.delete(f"/act/{act.id}"), 202, "deleted", 1)
 
-        self.assertStatusModels(self.api.get("/area"), 200, "areas", [])
+        self.assertStatusModels(self.api.get("/act"), 200, "acts", [])
 
-
-class TestAct(TestBase):
+class TestActValue(TestRest):
 
     @unittest.mock.patch("flask.request")
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
@@ -795,57 +2490,7 @@ class TestAct(TestBase):
         ])
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    def test_post(self):
-
-        person = self.sample.person("unit")
-
-        response = self.api.post("/act", json={
-            "act": {
-                "person_id": person.id,
-                "name": "unit",
-                "status": "negative",
-                "data": {
-                    "a": 1
-                }
-            }
-        })
-
-        self.assertStatusModel(response, 201, "act", {
-            "person_id": person.id,
-            "name": "unit",
-            "status": "negative",
-            "data": {
-                "a": 1,
-                "notified": 7
-            }
-        })
-
-        act_id = response.json["act"]["id"]
-
-    def test_list(self):
-
-        self.sample.act("unit", "test")
-        self.sample.act("test", "unit")
-
-        self.assertStatusModels(self.api.get("/act"), 200, "acts", [
-            {
-                "name": "test"
-            },
-            {
-                "name": "unit"
-            }
-        ])
-
-    def test_retrieve(self):
-
-        act = self.sample.act("unit", "test")
-
-        self.assertStatusModel(self.api.get(f"/act/{act.id}"), 200, "act", {
-            "name": "test"
-        })
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.BaseStatus.notify")
+    @unittest.mock.patch("service.Status.notify")
     def test_wrong(self, mock_notify):
 
         model = self.sample.act("unit", "hey")
@@ -858,7 +2503,7 @@ class TestAct(TestBase):
         mock_notify.assert_called_once()
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.BaseStatus.notify")
+    @unittest.mock.patch("service.Status.notify")
     def test_right(self, mock_notify):
 
         model = self.sample.act("unit", "hey", status="negative")
@@ -872,7 +2517,7 @@ class TestAct(TestBase):
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     @unittest.mock.patch("service.notify", unittest.mock.MagicMock)
-    def test_action(self):
+    def test_patch(self):
 
         model = self.sample.act("unit", "hey")
 
@@ -892,31 +2537,605 @@ class TestAct(TestBase):
         self.assertEqual(item.status, "positive")
         self.assertStatusValue(self.api.patch(f"/act/{model.id}/right"), 202, "updated", False)
 
-    def test_update(self):
 
-        act = self.sample.act("unit", "test")
+class TestToDoCL(TestRest):
 
-        self.assertStatusValue(self.api.patch(f"/act/{act.id}", json={
-            "act": {
-                "status": "negative"
+    @unittest.mock.patch("flask.request")
+    def test_fields(self, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+        template = self.sample.template("test", "todo", {"a": 1})
+
+        self.assertEqual(service.ToDoCL.fields().to_list(), [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios"
+            },
+            {
+                "name": "status",
+                "options": ['opened', 'closed'],
+                "style": "radios"
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {0: "None", template.id: "test"},
+                "style": "select",
+                "trigger": True
+            },
+            {
+                "name": "name"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea"
+            }
+        ])
+
+        self.assertEqual(service.ToDoCL.fields({"template_id": template.id}).to_list(), [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios"
+            },
+            {
+                "name": "status",
+                "options": ['opened', 'closed'],
+                "style": "radios"
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {0: "None", template.id: "test"},
+                "style": "select",
+                "trigger": True,
+                "value": template.id
+            },
+            {
+                "name": "name",
+                "value": "test",
+                "readonly": True
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "value": "a: 1\n",
+                "readonly": True
+            }
+        ])
+
+    @unittest.mock.patch("flask.request")
+    def test_validate(self, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+        template = self.sample.template("test", "todo", {"a": 1})
+
+        fields = service.ToDoCL.fields()
+
+        self.assertFalse(service.ToDoCL.validate(fields))
+
+        self.assertEqual(fields.to_list(), [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "status",
+                "options": ['opened', 'closed'],
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {0: "None", template.id: "test"},
+                "style": "select",
+                "trigger": True,
+                "errors": ["missing value"]
+            },
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "errors": ["missing value"]
+            }
+        ])
+
+        self.assertEqual(fields.errors, [])
+
+    def test_options(self):
+
+        person = self.sample.person("unit")
+        template = self.sample.template("test", "todo", {"a": 1})
+
+        response = self.api.options("/todo")
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {str(person.id): "unit"},
+                "style": "radios"
+            },
+            {
+                "name": "status",
+                "options": ['opened', 'closed'],
+                "style": "radios"
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {'0': "None", str(template.id): "test"},
+                "style": "select",
+                "trigger": True
+            },
+            {
+                "name": "name"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea"
+            }
+        ])
+
+        response = self.api.options("/todo", json={"todo": {
+            "nope": "bad"
+        }})
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {str(person.id): "unit"},
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "status",
+                "options": ['opened', 'closed'],
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {'0': "None", str(template.id): "test"},
+                "style": "select",
+                "trigger": True,
+                "errors": ["missing value"]
+            },
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "errors": ["missing value"]
+            }
+        ], [
+            "unknown field 'nope'"
+        ])
+
+        response = self.api.options("/todo", json={"todo": {
+            "person_id": person.id,
+            "status": "opened",
+            "template_id": template.id
+        }})
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {str(person.id): "unit"},
+                "style": "radios",
+                "value": person.id
+            },
+            {
+                "name": "status",
+                "options": ['opened', 'closed'],
+                "style": "radios",
+                "value": "opened"
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {'0': "None", str(template.id): "test"},
+                "style": "select",
+                "trigger": True,
+                "value": template.id
+            },
+            {
+                "name": "name",
+                "value": "test",
+                "readonly": True
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "value": "a: 1\n",
+                "readonly": True
+            }
+        ])
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    def test_post(self):
+
+        person = self.sample.person("unit")
+
+        response = self.api.post("/todo", json={
+            "todo": {
+                "person_id": person.id,
+                "name": "unit",
+                "status": "closed",
+                "data": {
+                    "a": 1
+                }
+            }
+        })
+
+        self.assertStatusModel(response, 201, "todo", {
+            "person_id": person.id,
+            "name": "unit",
+            "status": "closed",
+            "data": {
+                "a": 1,
+                "notified": 7
+            }
+        })
+
+        todo_id = response.json["todo"]["id"]
+
+    def test_get(self):
+
+        self.sample.todo("unit", "test")
+        self.sample.todo("test", "unit")
+
+        self.assertStatusModels(self.api.get("/todo"), 200, "todos", [
+            {
+                "name": "test"
+            },
+            {
+                "name": "unit"
+            }
+        ])
+
+class TestToDoRUD(TestRest):
+
+    @unittest.mock.patch("flask.request")
+    def test_fields(self, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+
+        self.assertEqual(service.ToDoRUD.fields().to_list(), [
+            {
+                "name": "id",
+                "readonly": True
+            },
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios"
+            },
+            {
+                "name": "status",
+                "options": ['opened', 'closed'],
+                "style": "radios"
+            },
+            {
+                "name": "name"
+            },
+            {
+                "name": "created",
+                "style": "datetime",
+                "readonly": True
+            },
+            {
+                "name": "updated",
+                "style": "datetime",
+                "readonly": True
+            },
+            {
+                "name": "yaml",
+                "style": "textarea"
+            }
+        ])
+
+    @unittest.mock.patch("flask.request")
+    def test_validate(self, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+
+        fields = service.ToDoRUD.fields()
+
+        self.assertFalse(service.ToDoRUD.validate(fields))
+
+        self.assertEqual(fields.to_list(), [
+            {
+                "name": "id",
+                "readonly": True
+            },
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "status",
+                "options": ['opened', 'closed'],
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "created",
+                "style": "datetime",
+                "readonly": True
+            },
+            {
+                "name": "updated",
+                "style": "datetime",
+                "readonly": True
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "errors": ["missing value"]
+            }
+        ])
+
+        self.assertEqual(fields.errors, [])
+
+    @unittest.mock.patch("flask.request")
+    def test_retrieve(self, mock_request):
+
+        mock_request.session = self.session
+
+        todo = self.sample.todo("unit", "test")
+
+        self.assertEqual(service.ToDoRUD.retrieve(todo.id).name, "test")
+
+    def test_get(self):
+
+        todo = self.sample.todo("unit", "test")
+
+        self.assertStatusModel(self.api.get(f"/todo/{todo.id}"), 200, "todo", {
+            "name": "test"
+        })
+
+    def test_options(self):
+
+        unit = self.sample.person("unit")
+        todo = self.sample.todo("unit", "test", status="opened", data={"text": 1})
+
+        response = self.api.options(f"/todo/{todo.id}")
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "id",
+                "readonly": True,
+                "value": todo.id,
+                "original": todo.id
+            },
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [unit.id],
+                "labels": {str(unit.id): "unit"},
+                "style": "radios",
+                "value": unit.id,
+                "original": unit.id
+            },
+            {
+                "name": "status",
+                "options": ['opened', 'closed'],
+                "style": "radios",
+                "value": "opened",
+                "original": "opened"
+            },
+            {
+                "name": "name",
+                "value": "test",
+                "original": "test"
+            },
+            {
+                "name": "created",
+                "style": "datetime",
+                "readonly": True,
+                "value": 7,
+                "original": 7
+            },
+            {
+                "name": "updated",
+                "style": "datetime",
+                "readonly": True,
+                "value": 8,
+                "original": 8
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "value": "text: 1\n",
+                "original": "text: 1\n"
+            }
+        ])
+
+        response = self.api.options(f"/todo/{todo.id}", json={"todo": {
+            "nope": "bad"
+        }})
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "id",
+                "readonly": True,
+                "value": todo.id,
+                "original": todo.id
+            },
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [unit.id],
+                "labels": {str(unit.id): "unit"},
+                "style": "radios",
+                "original": unit.id,
+                "errors": ["missing value"]
+            },
+            {
+                "name": "status",
+                "options": ['opened', 'closed'],
+                "style": "radios",
+                "original": "opened",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "name",
+                "original": "test",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "created",
+                "style": "datetime",
+                "readonly": True,
+                "value": 7,
+                "original": 7
+            },
+            {
+                "name": "updated",
+                "style": "datetime",
+                "readonly": True,
+                "value": 8,
+                "original": 8
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "original": "text: 1\n",
+                "errors": ["missing value"]
+            }
+        ], [
+            "unknown field 'nope'"
+        ])
+
+        test = self.sample.person("test")
+
+        response = self.api.options(f"/todo/{todo.id}", json={"todo": {
+            "person_id": test.id,
+            "name": "yup",
+            "status": "closed",
+            "yaml": 'text: 2'
+        }})
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "id",
+                "readonly": True,
+                "value": todo.id,
+                "original": todo.id
+            },
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [test.id, unit.id],
+                "labels": {str(test.id): "test", str(unit.id): "unit"},
+                "style": "radios",
+                "original": unit.id,
+                "value": test.id
+            },
+            {
+                "name": "status",
+                "options": ['opened', 'closed'],
+                "style": "radios",
+                "original": "opened",
+                "value": "closed"
+            },
+            {
+                "name": "name",
+                "original": "test",
+                "value": "yup"
+            },
+            {
+                "name": "created",
+                "style": "datetime",
+                "readonly": True,
+                "value": 7,
+                "original": 7
+            },
+            {
+                "name": "updated",
+                "style": "datetime",
+                "readonly": True,
+                "value": 8,
+                "original": 8
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "original": "text: 1\n",
+                "value": "text: 2"
+            }
+        ])
+
+    def test_patch(self):
+
+        todo = self.sample.todo("unit", "test")
+
+        self.assertStatusValue(self.api.patch(f"/todo/{todo.id}", json={
+            "todo": {
+                "status": "closed"
             }
         }), 202, "updated", 1)
 
-        self.assertStatusModel(self.api.get(f"/act/{act.id}"), 200, "act", {
+        self.assertStatusModel(self.api.get(f"/todo/{todo.id}"), 200, "todo", {
             "name": "test",
-            "status": "negative"
+            "status": "closed"
         })
 
     def test_delete(self):
 
-        act = self.sample.act("unit", "test")
+        todo = self.sample.todo("unit", "test")
 
-        self.assertStatusValue(self.api.delete(f"/act/{act.id}"), 202, "deleted", 1)
+        self.assertStatusValue(self.api.delete(f"/todo/{todo.id}"), 202, "deleted", 1)
 
-        self.assertStatusModels(self.api.get("/act"), 200, "acts", [])
+        self.assertStatusModels(self.api.get("/todo"), 200, "areas", [])
 
-
-class TestToDo(TestBase):
+class TestToDoAction(TestRest):
 
     @unittest.mock.patch("flask.request")
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
@@ -1047,56 +3266,6 @@ class TestToDo(TestBase):
             "person": service.model_out(model.person)
         })
 
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    def test_post(self):
-
-        person = self.sample.person("unit")
-
-        response = self.api.post("/todo", json={
-            "todo": {
-                "person_id": person.id,
-                "name": "unit",
-                "status": "closed",
-                "data": {
-                    "a": 1
-                }
-            }
-        })
-
-        self.assertStatusModel(response, 201, "todo", {
-            "person_id": person.id,
-            "name": "unit",
-            "status": "closed",
-            "data": {
-                "a": 1,
-                "notified": 7
-            }
-        })
-
-        todo_id = response.json["todo"]["id"]
-
-    def test_list(self):
-
-        self.sample.todo("unit", "test")
-        self.sample.todo("test", "unit")
-
-        self.assertStatusModels(self.api.get("/todo"), 200, "todos", [
-            {
-                "name": "test"
-            },
-            {
-                "name": "unit"
-            }
-        ])
-
-    def test_retrieve(self):
-
-        todo = self.sample.todo("unit", "test")
-
-        self.assertStatusModel(self.api.get(f"/todo/{todo.id}"), 200, "todo", {
-            "name": "test"
-        })
-
     @unittest.mock.patch("flask.request")
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     @unittest.mock.patch("service.notify")
@@ -1145,7 +3314,7 @@ class TestToDo(TestBase):
         })
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.BaseAction.notify")
+    @unittest.mock.patch("service.Action.notify")
     def test_remind(self, mock_notify):
 
         todo = self.sample.todo("unit", "hey", data={
@@ -1157,7 +3326,7 @@ class TestToDo(TestBase):
         mock_notify.assert_called_once_with("remind", todo)
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.BaseAction.notify")
+    @unittest.mock.patch("service.Action.notify")
     def test_pause(self, mock_notify):
 
         todo = self.sample.todo("unit", "hey", data={
@@ -1172,7 +3341,7 @@ class TestToDo(TestBase):
         mock_notify.assert_called_once()
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.BaseAction.notify")
+    @unittest.mock.patch("service.Action.notify")
     def test_unpause(self, mock_notify):
 
         todo = self.sample.todo("unit", "hey", data={
@@ -1188,7 +3357,7 @@ class TestToDo(TestBase):
         mock_notify.assert_called_once()
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.BaseAction.notify")
+    @unittest.mock.patch("service.Action.notify")
     def test_skip(self, mock_notify):
 
         todo = self.sample.todo("unit", "hey", data={
@@ -1205,7 +3374,7 @@ class TestToDo(TestBase):
         mock_notify.assert_called_once()
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.BaseAction.notify")
+    @unittest.mock.patch("service.Action.notify")
     def test_unskip(self, mock_notify):
 
         todo = self.sample.todo("unit", "hey", status="closed", data={
@@ -1225,7 +3394,7 @@ class TestToDo(TestBase):
 
     @unittest.mock.patch("flask.request")
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.BaseAction.notify")
+    @unittest.mock.patch("service.Action.notify")
     @unittest.mock.patch("service.notify", unittest.mock.MagicMock())
     def test_complete(self, mock_notify, mock_request):
 
@@ -1259,7 +3428,7 @@ class TestToDo(TestBase):
         mock_notify.assert_called_once()
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.BaseAction.notify")
+    @unittest.mock.patch("service.Action.notify")
     def test_uncomplete(self, mock_notify):
 
         todo = self.sample.todo("unit", "hey", status="closed", data={
@@ -1276,7 +3445,7 @@ class TestToDo(TestBase):
         mock_notify.assert_called_once()
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.BaseAction.notify")
+    @unittest.mock.patch("service.Action.notify")
     def test_expire(self, mock_notify):
 
         todo = self.sample.todo("unit", "hey", data={
@@ -1293,7 +3462,7 @@ class TestToDo(TestBase):
         mock_notify.assert_called_once()
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.BaseAction.notify")
+    @unittest.mock.patch("service.Action.notify")
     def test_unexpire(self, mock_notify):
 
         todo = self.sample.todo("unit", "hey", status="closed", data={
@@ -1313,7 +3482,7 @@ class TestToDo(TestBase):
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     @unittest.mock.patch("service.notify", unittest.mock.MagicMock)
-    def test_action(self):
+    def test_patch(self):
 
         person = self.sample.person("unit")
 
@@ -1403,31 +3572,613 @@ class TestToDo(TestBase):
         self.assertFalse(item.data["expired"])
         self.assertStatusValue(self.api.patch(f"/todo/{todo.id}/unexpire"), 202, "updated", False)
 
-    def test_update(self):
 
-        todo = self.sample.todo("unit", "test")
+class TestRoutineCL(TestRest):
 
-        self.assertStatusValue(self.api.patch(f"/todo/{todo.id}", json={
-            "todo": {
+    @unittest.mock.patch("flask.request")
+    def test_fields(self, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+        template = self.sample.template("test", "routine", {"a": 1})
+
+        self.assertEqual(service.RoutineCL.fields().to_list(), [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios"
+            },
+            {
+                "name": "status",
+                "options": ['opened', 'closed'],
+                "style": "radios"
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {0: "None", template.id: "test"},
+                "style": "select",
+                "trigger": True
+            },
+            {
+                "name": "name"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea"
+            }
+        ])
+
+        self.assertEqual(service.RoutineCL.fields({"template_id": template.id}).to_list(), [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios"
+            },
+            {
+                "name": "status",
+                "options": ['opened', 'closed'],
+                "style": "radios"
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {0: "None", template.id: "test"},
+                "style": "select",
+                "trigger": True,
+                "value": template.id
+            },
+            {
+                "name": "name",
+                "value": "test",
+                "readonly": True
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "value": "a: 1\n",
+                "readonly": True
+            }
+        ])
+
+    @unittest.mock.patch("flask.request")
+    def test_validate(self, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+        template = self.sample.template("test", "routine", {"a": 1})
+
+        fields = service.RoutineCL.fields()
+
+        self.assertFalse(service.RoutineCL.validate(fields))
+
+        self.assertEqual(fields.to_list(), [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "status",
+                "options": ['opened', 'closed'],
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {0: "None", template.id: "test"},
+                "style": "select",
+                "trigger": True,
+                "errors": ["missing value"]
+            },
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "errors": ["missing value"]
+            }
+        ])
+
+        self.assertEqual(fields.errors, [])
+
+    def test_options(self):
+
+        person = self.sample.person("unit")
+        template = self.sample.template("test", "routine", {"a": 1})
+
+        response = self.api.options("/routine")
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {str(person.id): "unit"},
+                "style": "radios"
+            },
+            {
+                "name": "status",
+                "options": ['opened', 'closed'],
+                "style": "radios"
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {'0': "None", str(template.id): "test"},
+                "style": "select",
+                "trigger": True
+            },
+            {
+                "name": "name"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea"
+            }
+        ])
+
+        response = self.api.options("/routine", json={"routine": {
+            "nope": "bad"
+        }})
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {str(person.id): "unit"},
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "status",
+                "options": ['opened', 'closed'],
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {'0': "None", str(template.id): "test"},
+                "style": "select",
+                "trigger": True,
+                "errors": ["missing value"]
+            },
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "errors": ["missing value"]
+            }
+        ], [
+            "unknown field 'nope'"
+        ])
+
+        response = self.api.options("/routine", json={"routine": {
+            "person_id": person.id,
+            "status": "opened",
+            "template_id": template.id
+        }})
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {str(person.id): "unit"},
+                "style": "radios",
+                "value": person.id
+            },
+            {
+                "name": "status",
+                "options": ['opened', 'closed'],
+                "style": "radios",
+                "value": "opened"
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {'0': "None", str(template.id): "test"},
+                "style": "select",
+                "trigger": True,
+                "value": template.id
+            },
+            {
+                "name": "name",
+                "value": "test",
+                "readonly": True
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "value": "a: 1\n",
+                "readonly": True
+            }
+        ])
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.notify", unittest.mock.MagicMock)
+    def test_post(self):
+
+        person = self.sample.person("unit")
+
+        response = self.api.post("/routine", json={
+            "routine": {
+                "person_id": person.id,
+                "name": "unit",
+                "status": "opened",
+                "created": 6,
+                "data": {
+                    "text": "hey"
+                }
+            }
+        })
+
+        self.assertStatusModel(response, 201, "routine", {
+            "person_id": person.id,
+            "name": "unit",
+            "status": "opened",
+            "created": 6,
+            "updated": 7,
+            "data": {
+                "text": "hey",
+                "notified": 7
+            }
+        })
+
+    def test_get(self):
+
+        self.sample.routine("unit", "test", created=7)
+        self.sample.routine("test", "unit", created=6)
+
+        self.assertStatusModels(self.api.get("/routine"), 200, "routines", [
+            {
+                "name": "test"
+            },
+            {
+                "name": "unit"
+            }
+        ])
+
+class TestRoutineRUD(TestRest):
+
+    @unittest.mock.patch("flask.request")
+    def test_fields(self, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+
+        self.assertEqual(service.RoutineRUD.fields().to_list(), [
+            {
+                "name": "id",
+                "readonly": True
+            },
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios"
+            },
+            {
+                "name": "status",
+                "options": ['opened', 'closed'],
+                "style": "radios"
+            },
+            {
+                "name": "name"
+            },
+            {
+                "name": "created",
+                "style": "datetime",
+                "readonly": True
+            },
+            {
+                "name": "updated",
+                "style": "datetime",
+                "readonly": True
+            },
+            {
+                "name": "yaml",
+                "style": "textarea"
+            }
+        ])
+
+    @unittest.mock.patch("flask.request")
+    def test_validate(self, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+
+        fields = service.RoutineRUD.fields()
+
+        self.assertFalse(service.RoutineRUD.validate(fields))
+
+        self.assertEqual(fields.to_list(), [
+            {
+                "name": "id",
+                "readonly": True
+            },
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "status",
+                "options": ['opened', 'closed'],
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "created",
+                "style": "datetime",
+                "readonly": True
+            },
+            {
+                "name": "updated",
+                "style": "datetime",
+                "readonly": True
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "errors": ["missing value"]
+            }
+        ])
+
+        self.assertEqual(fields.errors, [])
+        
+    @unittest.mock.patch("flask.request")
+    def test_retrieve(self, mock_request):
+
+        mock_request.session = self.session
+
+        routine = self.sample.routine("test", "unit")
+
+        self.assertEqual(service.RoutineRUD.retrieve(routine.id).name, "unit")
+
+    def test_get(self):
+
+        routine = self.sample.routine("test", "unit")
+
+        self.assertStatusModel(self.api.get(f"/routine/{routine.id}"), 200, "routine", {
+            "person_id": routine.person_id,
+            "name": "unit",
+            "status": "opened",
+            "created": 7,
+            "data": {
+                "text": "routine it"
+            },
+            "yaml": "text: routine it\n"
+        })
+
+    def test_options(self):
+
+        unit = self.sample.person("unit")
+        routine = self.sample.routine("unit", "test", status="opened", data={"text": 1})
+
+        response = self.api.options(f"/routine/{routine.id}")
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "id",
+                "readonly": True,
+                "value": routine.id,
+                "original": routine.id
+            },
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [unit.id],
+                "labels": {str(unit.id): "unit"},
+                "style": "radios",
+                "value": unit.id,
+                "original": unit.id
+            },
+            {
+                "name": "status",
+                "options": ['opened', 'closed'],
+                "style": "radios",
+                "value": "opened",
+                "original": "opened"
+            },
+            {
+                "name": "name",
+                "value": "test",
+                "original": "test"
+            },
+            {
+                "name": "created",
+                "style": "datetime",
+                "readonly": True,
+                "value": 7,
+                "original": 7
+            },
+            {
+                "name": "updated",
+                "style": "datetime",
+                "readonly": True,
+                "value": 8,
+                "original": 8
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "value": "text: 1\n",
+                "original": "text: 1\n"
+            }
+        ])
+
+        response = self.api.options(f"/routine/{routine.id}", json={"routine": {
+            "nope": "bad"
+        }})
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "id",
+                "readonly": True,
+                "value": routine.id,
+                "original": routine.id
+            },
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [unit.id],
+                "labels": {str(unit.id): "unit"},
+                "style": "radios",
+                "original": unit.id,
+                "errors": ["missing value"]
+            },
+            {
+                "name": "status",
+                "options": ['opened', 'closed'],
+                "style": "radios",
+                "original": "opened",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "name",
+                "original": "test",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "created",
+                "style": "datetime",
+                "readonly": True,
+                "value": 7,
+                "original": 7
+            },
+            {
+                "name": "updated",
+                "style": "datetime",
+                "readonly": True,
+                "value": 8,
+                "original": 8
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "original": "text: 1\n",
+                "errors": ["missing value"]
+            }
+        ], [
+            "unknown field 'nope'"
+        ])
+
+        test = self.sample.person("test")
+
+        response = self.api.options(f"/routine/{routine.id}", json={"routine": {
+            "person_id": test.id,
+            "name": "yup",
+            "status": "closed",
+            "yaml": 'text: 2'
+        }})
+
+        self.assertStatusFields(response, 200, [
+            {
+                "name": "id",
+                "readonly": True,
+                "value": routine.id,
+                "original": routine.id
+            },
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [test.id, unit.id],
+                "labels": {str(test.id): "test", str(unit.id): "unit"},
+                "style": "radios",
+                "original": unit.id,
+                "value": test.id
+            },
+            {
+                "name": "status",
+                "options": ['opened', 'closed'],
+                "style": "radios",
+                "original": "opened",
+                "value": "closed"
+            },
+            {
+                "name": "name",
+                "original": "test",
+                "value": "yup"
+            },
+            {
+                "name": "created",
+                "style": "datetime",
+                "readonly": True,
+                "value": 7,
+                "original": 7
+            },
+            {
+                "name": "updated",
+                "style": "datetime",
+                "readonly": True,
+                "value": 8,
+                "original": 8
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "original": "text: 1\n",
+                "value": "text: 2"
+            }
+        ])
+
+    def test_patch(self):
+
+        routine = self.sample.routine("test", "unit")
+
+        self.assertStatusValue(self.api.patch(f"/routine/{routine.id}", json={
+            "routine": {
                 "status": "closed"
             }
         }), 202, "updated", 1)
 
-        self.assertStatusModel(self.api.get(f"/todo/{todo.id}"), 200, "todo", {
-            "name": "test",
+        self.assertStatusModel(self.api.get(f"/routine/{routine.id}"), 200, "routine", {
             "status": "closed"
         })
 
     def test_delete(self):
 
-        todo = self.sample.todo("unit", "test")
+        routine = self.sample.routine("test", "unit")
 
-        self.assertStatusValue(self.api.delete(f"/todo/{todo.id}"), 202, "deleted", 1)
+        self.assertStatusValue(self.api.delete(f"/routine/{routine.id}"), 202, "deleted", 1)
 
-        self.assertStatusModels(self.api.get("/todo"), 200, "areas", [])
+        self.assertStatusModels(self.api.get("/routine"), 200, "routines", [])
 
-
-class TestRoutine(TestBase):
+class TestRoutineAction(TestRest):
 
     @unittest.mock.patch("flask.request")
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
@@ -1644,65 +4395,6 @@ class TestRoutine(TestBase):
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     @unittest.mock.patch("service.notify", unittest.mock.MagicMock)
-    def test_post(self):
-
-        person = self.sample.person("unit")
-
-        response = self.api.post("/routine", json={
-            "routine": {
-                "person_id": person.id,
-                "name": "unit",
-                "status": "opened",
-                "created": 6,
-                "data": {
-                    "text": "hey"
-                }
-            }
-        })
-
-        self.assertStatusModel(response, 201, "routine", {
-            "person_id": person.id,
-            "name": "unit",
-            "status": "opened",
-            "created": 6,
-            "updated": 7,
-            "data": {
-                "text": "hey",
-                "notified": 7
-            }
-        })
-
-    def test_list(self):
-
-        self.sample.routine("unit", "test", created=7)
-        self.sample.routine("test", "unit", created=6)
-
-        self.assertStatusModels(self.api.get("/routine"), 200, "routines", [
-            {
-                "name": "test"
-            },
-            {
-                "name": "unit"
-            }
-        ])
-
-    def test_retrieve(self):
-
-        routine = self.sample.routine("test", "unit")
-
-        self.assertStatusModel(self.api.get(f"/routine/{routine.id}"), 200, "routine", {
-            "person_id": routine.person_id,
-            "name": "unit",
-            "status": "opened",
-            "created": 7,
-            "data": {
-                "text": "routine it"
-            },
-            "yaml": "text: routine it\n"
-        })
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.notify", unittest.mock.MagicMock)
     def test_next(self):
 
         routine = self.sample.routine("unit", "hey", data={
@@ -1869,7 +4561,7 @@ class TestRoutine(TestBase):
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     @unittest.mock.patch("service.notify", unittest.mock.MagicMock)
-    def test_action(self):
+    def test_patch(self):
 
         routine = self.sample.routine("unit", "hey", data={
             "text": "hey",
@@ -1963,30 +4655,8 @@ class TestRoutine(TestBase):
         self.assertFalse(item.data["expired"])
         self.assertStatusValue(self.api.patch(f"/routine/{routine.id}/unexpire"), 202, "updated", False)
 
-    def test_update(self):
 
-        routine = self.sample.routine("test", "unit")
-
-        self.assertStatusValue(self.api.patch(f"/routine/{routine.id}", json={
-            "routine": {
-                "status": "closed"
-            }
-        }), 202, "updated", 1)
-
-        self.assertStatusModel(self.api.get(f"/routine/{routine.id}"), 200, "routine", {
-            "status": "closed"
-        })
-
-    def test_delete(self):
-
-        routine = self.sample.routine("test", "unit")
-
-        self.assertStatusValue(self.api.delete(f"/routine/{routine.id}"), 202, "deleted", 1)
-
-        self.assertStatusModels(self.api.get("/routine"), 200, "routines", [])
-
-
-class TestTask(TestBase):
+class TestTaskAction(TestRest):
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     @unittest.mock.patch("service.notify")
@@ -2189,7 +4859,7 @@ class TestTask(TestBase):
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     @unittest.mock.patch("service.notify", unittest.mock.MagicMock)
-    def test_action(self):
+    def test_patch(self):
 
         routine = self.sample.routine("unit", "hey", data={
             "text": "hey",

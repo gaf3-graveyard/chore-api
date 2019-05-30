@@ -94,7 +94,7 @@ class Template(Base):
     
     id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True, autoincrement=True)
     name = sqlalchemy.Column(sqlalchemy.String(128), nullable=False)
-    kind = sqlalchemy.Column(sqlalchemy.Enum("routine", "todo", "act"))
+    kind = sqlalchemy.Column(sqlalchemy.Enum("area", "act", "todo", "routine"))
     data = sqlalchemy.Column(
         sqlalchemy.ext.mutable.MutableDict.as_mutable(
             sqlalchemy_jsonfield.JSONField(enforce_string=True,enforce_unicode=False)

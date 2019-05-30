@@ -23,13 +23,10 @@ cross:
 build:
 	docker build . -t $(ACCOUNT)/$(IMAGE):$(VERSION)
 
-kube:
-	-kubectl proxy --address=127.0.0.1 --port=7580 --accept-hosts='.*' &
-
 network:
 	-docker network create $(NETWORK)
 
-shell: kube network
+shell: network
 	-docker run -it --rm --name=$(NAME) --network=$(NETWORK) $(VOLUMES) $(ENVIRONMENT) $(ACCOUNT)/$(IMAGE):$(VERSION) sh
 
 test: network
@@ -38,10 +35,10 @@ test: network
 db:
 	docker run -it --network=$(NETWORK) $(VOLUMES) $(ENVIRONMENT) $(ACCOUNT)/$(IMAGE):$(VERSION) sh -c "bin/db.py"
 
-run: kube network
+run: network
 	docker run --rm --name=$(NAME) --network=$(NETWORK) $(VOLUMES) $(ENVIRONMENT) -p 127.0.0.1:$(PORT):80 --expose=80 $(ACCOUNT)/$(IMAGE):$(VERSION)
 
-start: kube network
+start: network
 	docker run -d --name=$(NAME) --network=$(NETWORK) $(VOLUMES) $(ENVIRONMENT) -p 127.0.0.1:$(PORT):80 --expose=80 $(ACCOUNT)/$(IMAGE):$(VERSION)
 
 stop:
@@ -51,16 +48,13 @@ push:
 	docker push $(ACCOUNT)/$(IMAGE):$(VERSION)
 
 install:
-	kubectl create -f kubernetes/account.yaml
 	kubectl create -f kubernetes/api.yaml
 
 update:
-	kubectl replace -f kubernetes/account.yaml
 	kubectl replace -f kubernetes/api.yaml
 
 remove:
 	-kubectl delete -f kubernetes/api.yaml
-	-kubectl delete -f kubernetes/account.yaml
 
 reset: remove install
 

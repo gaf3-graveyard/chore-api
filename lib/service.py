@@ -131,54 +131,111 @@ class Health(flask_restful.Resource):
         return {"message": "OK"}
 
 
-class BaseCL(flask_restful.Resource):
+class RestCL(flask_restful.Resource):
+
+    @classmethod
+    def fields(cls, values=None, originals=None):
+
+        return opengui.Fields(values, originals=originals, fields=copy.deepcopy(cls.FIELDS))
+
+    @staticmethod
+    def validate(fields):
+
+        return fields.validate()
+
+    @require_session
+    def options(self):
+
+        values = flask.request.json[self.SINGULAR] if flask.request.json and self.SINGULAR in flask.request.json else None
+
+        fields = self.fields(values)
+
+        if values and not self.validate(fields):
+            return {"fields": fields.to_list(), "errors": fields.errors}
+        else:
+            return {"fields": fields.to_list()}
 
     @require_session
     def post(self):
 
-        model = self.Model(**model_in(flask.request.json[self.singular]))
+        model = self.MODEL(**model_in(flask.request.json[self.SINGULAR]))
         flask.request.session.add(model)
         flask.request.session.commit()
 
-        return {self.singular: model_out(model)}, 201
+        return {self.SINGULAR: model_out(model)}, 201
 
     @require_session
     def get(self):
 
         models = flask.request.session.query(
-            self.Model
+            self.MODEL
         ).filter_by(
             **flask.request.args.to_dict()
         ).order_by(
-            *self.order_by
+            *self.ORDER
         ).all()
         flask.request.session.commit()
 
-        return {self.plural: models_out(models)}
+        return {self.PLURAL: models_out(models)}
 
-class BaseRUD(flask_restful.Resource):
+class RestRUD(flask_restful.Resource):
 
-    @require_session
-    def get(self, id):
+    ID = [
+        {
+            "name": "id",
+            "readonly": True
+        }
+    ]
+
+    @classmethod
+    def fields(cls, values=None, originals=None):
+
+        return opengui.Fields(values, originals=originals, fields=copy.deepcopy(cls.ID + cls.FIELDS))
+
+    @staticmethod
+    def validate(fields):
+
+        return fields.validate()
+
+    @classmethod
+    def retrieve(self, id):
 
         model = flask.request.session.query(
-            self.Model
+            self.MODEL
         ).get(
             id
         )
         flask.request.session.commit()
+        return model
 
-        return {self.singular: model_out(model)}
+    @require_session
+    def get(self, id):
+
+        return {self.SINGULAR: model_out(self.retrieve(id))}
+
+    @require_session
+    def options(self, id):
+
+        originals = model_out(self.retrieve(id))
+
+        values = flask.request.json[self.SINGULAR] if flask.request.json and self.SINGULAR in flask.request.json else None
+
+        fields = self.fields(values or originals, originals)
+
+        if values and not self.validate(fields):
+            return {"fields": fields.to_list(), "errors": fields.errors}
+        else:
+            return {"fields": fields.to_list()}
 
     @require_session
     def patch(self, id):
 
         rows = flask.request.session.query(
-            self.Model
+            self.MODEL
         ).filter_by(
             id=id
         ).update(
-            model_in(flask.request.json[self.singular])
+            model_in(flask.request.json[self.SINGULAR])
         )
         flask.request.session.commit()
 
@@ -188,7 +245,7 @@ class BaseRUD(flask_restful.Resource):
     def delete(self, id):
 
         rows = flask.request.session.query(
-            self.Model
+            self.MODEL
         ).filter_by(
             id=id
         ).delete()
@@ -198,32 +255,104 @@ class BaseRUD(flask_restful.Resource):
 
 
 class Person:
-    singular = "person"
-    plural = "persons"
-    Model = mysql.Person
-    order_by = [mysql.Person.name]
+    SINGULAR = "person"
+    PLURAL = "persons"
+    MODEL = mysql.Person
+    ORDER = [mysql.Person.name]
 
-class PersonCL(Person, BaseCL):
+    FIELDS = [
+        {
+            "name": "name"
+        },
+        {
+            "name": "yaml",
+            "style": "textarea",
+            "optional": True
+        }
+    ]
+
+    @classmethod
+    def choices(cls):
+
+        ids = []
+        labels = {}
+
+        for model in flask.request.session.query(
+            cls.MODEL
+        ).filter_by(
+            **flask.request.args.to_dict()
+        ).order_by(
+            *cls.ORDER
+        ).all():
+            ids.append(model.id)
+            labels[model.id] = model.name
+
+        flask.request.session.commit()
+
+        return (ids, labels)
+
+class PersonCL(Person, RestCL):
     pass
 
-class PersonRUD(Person, BaseRUD):
+class PersonRUD(Person, RestRUD):
     pass
 
 
 class Template:
-    singular = "template"
-    plural = "templates"
-    Model = mysql.Template
-    order_by = [mysql.Template.name]
+    SINGULAR = "template"
+    PLURAL = "templates"
+    MODEL = mysql.Template
+    ORDER = [mysql.Template.name]
 
-class TemplateCL(Template, BaseCL):
+    FIELDS = [
+        {
+            "name": "name"
+        },
+        {
+            "name": "kind",
+            "options": [
+                "area",
+                "act",
+                "todo",
+                "routine"
+            ],
+            "style": "radios"
+        },
+        {
+            "name": "yaml",
+            "style": "textarea"
+        }
+    ]
+
+    @classmethod
+    def choices(cls, kind):
+
+        ids = [0]
+        labels = {0: "None"}
+
+        for model in flask.request.session.query(
+            cls.MODEL
+        ).filter_by(
+            kind=kind
+        ).order_by(
+            *cls.ORDER
+        ).all():
+            ids.append(model.id)
+            labels[model.id] = model.name
+
+        flask.request.session.commit()
+
+        return (ids, labels)
+
+
+class TemplateCL(Template, RestCL):
     pass
 
-class TemplateRUD(Template, BaseRUD):
+class TemplateRUD(Template, RestRUD):
     pass
 
 
-class BaseStatus(flask_restful.Resource):
+class Status(flask_restful.Resource):
 
     @staticmethod
     def build(**kwargs):
@@ -279,16 +408,16 @@ class BaseStatus(flask_restful.Resource):
         model.updated = time.time()
 
         notify({
-            "kind": cls.singular,
+            "kind": cls.SINGULAR,
             "action": action,
-            cls.singular: model_out(model),
+            cls.SINGULAR: model_out(model),
             "person": model_out(model.person)
         })
 
     @classmethod
     def create(cls, **kwargs):
 
-        model = cls.Model(**cls.build(**kwargs))
+        model = cls.MODEL(**cls.build(**kwargs))
         flask.request.session.add(model)
         flask.request.session.commit()
 
@@ -296,24 +425,106 @@ class BaseStatus(flask_restful.Resource):
 
         return model
 
+class StatusCL(Status, RestCL):
+
+    @classmethod
+    def fields(cls, values=None, originals=None):
+
+        (person_ids, person_labels) = Person.choices()
+        (template_ids, template_labels) = Template.choices(cls.SINGULAR)
+
+        fields = opengui.Fields(values, originals=originals, fields=[
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": person_ids,
+                "labels": person_labels,
+                "style": "radios"
+            },
+            {
+                "name": "status",
+                "options": cls.STATUSES,
+                "style": "radios"
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": template_ids,
+                "labels": template_labels,
+                "style": "select",
+                "trigger": True
+            },
+            {
+                "name": "name"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea"
+            }
+        ])
+
+        if fields["template_id"].value:
+
+            template = model_out(TemplateRUD.retrieve(fields["template_id"].value))
+
+            fields["name"].readonly = True
+            fields["yaml"].readonly = True
+
+            fields["name"].value = template["name"]
+            fields["yaml"].value = template["yaml"]
+
+        return fields
+
     @require_session
-    def patch(self, id, action):
+    def post(self):
 
-        model = flask.request.session.query(self.Model).get(id)
+        model = self.create(**model_in(flask.request.json[self.SINGULAR]))
 
-        if action in self.ACTIONS:
+        return {self.SINGULAR: model_out(model)}, 201
 
-            updated = getattr(self, action)(model)
+class StatusRUD(Status, RestRUD):
 
-            if updated:
-                flask.request.session.commit()
+    @classmethod
+    def fields(cls, values=None, originals=None):
 
-            return {"updated": updated}, 202
+        (person_ids, person_labels) = Person.choices()
+
+        fields = opengui.Fields(values, originals=originals, fields=cls.ID + [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": person_ids,
+                "labels": person_labels,
+                "style": "radios"
+            },
+            {
+                "name": "status",
+                "options": cls.STATUSES,
+                "style": "radios"
+            },
+            {
+                "name": "name"
+            },
+            {
+                "name": "created",
+                "style": "datetime",
+                "readonly": True
+            },
+            {
+                "name": "updated",
+                "style": "datetime",
+                "readonly": True
+            },
+            {
+                "name": "yaml",
+                "style": "textarea"
+            }
+        ])
+
+        return fields
 
 
-class BaseValue(BaseStatus):
-
-    ACTIONS = ["right", "wrong"]
+class Value(Status):
 
     @classmethod
     def wrong(cls, model):
@@ -345,10 +556,22 @@ class BaseValue(BaseStatus):
 
         return False
 
+    @require_session
+    def patch(self, id, action):
 
-class BaseAction(BaseStatus):
+        model = flask.request.session.query(self.MODEL).get(id)
 
-    ACTIONS = ["remind", "pause", "unpause", "skip", "unskip", "complete", "uncomplete", "expire", "unexpire"]
+        if action in self.ACTIONS:
+
+            updated = getattr(self, action)(model)
+
+            if updated:
+                flask.request.session.commit()
+
+            return {"updated": updated}, 202
+
+
+class Action(Status):
 
     @classmethod
     def remind(cls, model):
@@ -490,30 +713,37 @@ class BaseAction(BaseStatus):
 
         return False
 
-
-class StatusCL(BaseStatus, BaseCL):
-
     @require_session
-    def post(self):
+    def patch(self, id, action):
 
-        model = self.create(**model_in(flask.request.json[self.singular]))
+        model = flask.request.session.query(self.MODEL).get(id)
 
-        return {self.singular: model_out(model)}, 201
+        if action in self.ACTIONS:
+
+            updated = getattr(self, action)(model)
+
+            if updated:
+                flask.request.session.commit()
+
+            return {"updated": updated}, 202
 
 
 class Area:
-    singular = "area"
-    plural = "areas"
-    Model = mysql.Area
-    order_by = [mysql.Area.name]
+
+    SINGULAR = "area"
+    PLURAL = "areas"
+    MODEL = mysql.Area
+    ORDER = [mysql.Area.name]
+    STATUSES = ['positive', 'negative']
+    ACTIONS = ["right", "wrong"]
 
 class AreaCL(Area, StatusCL):
     pass
 
-class AreaRUD(Area, BaseRUD):
+class AreaRUD(Area, StatusRUD):
     pass
 
-class AreaValue(Area, BaseValue):
+class AreaValue(Area, Value):
 
     @classmethod
     def wrong(cls, model):
@@ -535,23 +765,26 @@ class AreaValue(Area, BaseValue):
 
 
 class Act:
-    singular = "act"
-    plural = "acts"
-    Model = mysql.Act
-    order_by = [mysql.Act.created.desc()]
+
+    SINGULAR = "act"
+    PLURAL = "acts"
+    MODEL = mysql.Act
+    ORDER = [mysql.Act.created.desc()]
+    STATUSES = ['positive', 'negative']
+    ACTIONS = ["right", "wrong"]
 
 class ActCL(Act, StatusCL):
     pass
 
-class ActRUD(Act, BaseRUD):
+class ActRUD(Act, StatusRUD):
     pass
 
-class ActValue(Act, BaseValue):
+class ActValue(Act, Value):
 
     @classmethod
     def create(cls, **kwargs):
 
-        model = cls.Model(**cls.build(**kwargs))
+        model = cls.MODEL(**cls.build(**kwargs))
         flask.request.session.add(model)
         flask.request.session.commit()
 
@@ -564,10 +797,13 @@ class ActValue(Act, BaseValue):
 
 
 class ToDo:
-    singular = "todo"
-    plural = "todos"
-    Model = mysql.ToDo
-    order_by = [mysql.ToDo.created.desc()]
+
+    SINGULAR = "todo"
+    PLURAL = "todos"
+    MODEL = mysql.ToDo
+    ORDER = [mysql.ToDo.created.desc()]
+    STATUSES = ['opened', 'closed']
+    ACTIONS = ["remind", "pause", "unpause", "skip", "unskip", "complete", "uncomplete", "expire", "unexpire"]
 
 class ToDoCL(ToDo, StatusCL):
 
@@ -581,10 +817,10 @@ class ToDoCL(ToDo, StatusCL):
 
         return {"updated": updated}, 202
 
-class ToDoRUD(ToDo, BaseRUD):
+class ToDoRUD(ToDo, StatusRUD):
     pass
 
-class ToDoAction(ToDo, BaseAction):
+class ToDoAction(ToDo, Action):
 
     @staticmethod
     def todos(data):
@@ -613,7 +849,7 @@ class ToDoAction(ToDo, BaseAction):
             person_id=person_id,
             status="opened"
         ).order_by(
-            *ToDo.order_by
+            *ToDo.ORDER
         ).all():
 
             todo.data["notified"] = time.time()
@@ -658,20 +894,21 @@ class ToDoAction(ToDo, BaseAction):
 
 
 class Routine:
-    singular = "routine"
-    plural = "routines"
-    Model = mysql.Routine
-    order_by = [mysql.Routine.created.desc()]
+
+    SINGULAR = "routine"
+    PLURAL = "routines"
+    MODEL = mysql.Routine
+    ORDER = [mysql.Routine.created.desc()]
+    STATUSES = ['opened', 'closed']
+    ACTIONS = ["remind", "next", "pause", "unpause", "skip", "unskip", "complete", "uncomplete", "expire", "unexpire"]
 
 class RoutineCL(Routine, StatusCL):
     pass
 
-class RoutineRUD(Routine, BaseRUD):
+class RoutineRUD(Routine, StatusRUD):
     pass
 
-class RoutineAction(Routine, BaseAction):
-
-    ACTIONS = ["remind", "next", "pause", "unpause", "skip", "unskip", "complete", "uncomplete", "expire", "unexpire"]
+class RoutineAction(Routine, Action):
 
     @staticmethod
     def build(**kwargs):
@@ -679,7 +916,7 @@ class RoutineAction(Routine, BaseAction):
         Builds a routine from a raw fields, template, template id, etc.
         """
 
-        fields = BaseAction.build(**kwargs)
+        fields = Action.build(**kwargs)
 
         if fields["data"].get("todos"):
 
@@ -691,7 +928,7 @@ class RoutineAction(Routine, BaseAction):
                 person_id=fields["person_id"],
                 status="opened"
             ).order_by(
-                *ToDo.order_by
+                *ToDo.ORDER
             ).all():
                 tasks.append({
                     "text": todo.data["text"],
@@ -743,7 +980,7 @@ class RoutineAction(Routine, BaseAction):
     @classmethod
     def create(cls, **kwargs):
 
-        model = cls.Model(**cls.build(**kwargs))
+        model = cls.MODEL(**cls.build(**kwargs))
         flask.request.session.add(model)
         flask.request.session.commit()
 
