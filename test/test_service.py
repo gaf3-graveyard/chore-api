@@ -6,6 +6,7 @@ import json
 import yaml
 
 import flask
+import opengui
 import sqlalchemy.exc
 
 import mysql
@@ -179,6 +180,102 @@ class TestService(TestRest):
             unittest.mock.call()
         ])
 
+    def test_validate(self):
+
+        fields = opengui.Fields(fields=[
+            {
+                "name": "name"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea"
+            }
+        ])
+        self.assertFalse(service.validate(fields))
+        self.assertEqual(fields.to_list(), [
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "errors": ["missing value"]
+            }
+        ])
+
+        fields = opengui.Fields(fields=[
+            {
+                "name": "name"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "value": "a: 1"
+            }
+        ])
+        self.assertFalse(service.validate(fields))
+        self.assertEqual(fields.to_list(), [
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "value": "a: 1"
+            }
+        ])
+
+        fields = opengui.Fields(fields=[
+            {
+                "name": "name",
+                "value": "yup"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "value": "a:1"
+            }
+        ])
+        self.assertFalse(service.validate(fields))
+        self.assertEqual(fields.to_list(), [
+            {
+                "name": "name",
+                "value": "yup"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "value": "a:1",
+                "errors": ["must be dict"]
+            }
+        ])
+
+        fields = opengui.Fields(fields=[
+            {
+                "name": "name",
+                "value": "yup"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "value": "a: 1"
+            }
+        ])
+        self.assertTrue(service.validate(fields))
+        self.assertEqual(fields.to_list(), [
+            {
+                "name": "name",
+                "value": "yup"
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "value": "a: 1"
+            }
+        ])
+
     def test_model_in(self):
 
         self.assertEqual(service.model_in({
@@ -290,7 +387,7 @@ class TestPersonCL(TestRest):
 
     def test_validate(self):
 
-        fields = service.PersonCL.fields()
+        fields = service.PersonCL.fields(values={"yaml": "a:1"})
 
         self.assertFalse(service.PersonCL.validate(fields))
 
@@ -302,7 +399,9 @@ class TestPersonCL(TestRest):
             {
                 "name": "yaml",
                 "style": "textarea",
-                "optional": True
+                "optional": True,
+                "value": "a:1",
+                "errors": ["must be dict"]
             }
         ])
 
@@ -406,7 +505,7 @@ class TestPersonRUD(TestRest):
 
     def test_validate(self):
 
-        fields = service.PersonRUD.fields()
+        fields = service.PersonRUD.fields(values={"yaml": "a:1"})
 
         self.assertFalse(service.PersonRUD.validate(fields))
 
@@ -422,7 +521,9 @@ class TestPersonRUD(TestRest):
             {
                 "name": "yaml",
                 "style": "textarea",
-                "optional": True
+                "optional": True,
+                "value": "a:1",
+                "errors": ["must be dict"]
             }
         ])
 
@@ -434,14 +535,6 @@ class TestPersonRUD(TestRest):
         person = self.sample.person("unit")
 
         self.assertEqual(service.PersonRUD.retrieve(person.id).name, "unit")
-
-    def test_get(self):
-
-        person = self.sample.person("unit")
-
-        self.assertStatusModel(self.api.get(f"/person/{person.id}"), 200, "person", {
-            "name": "unit"
-        })
 
     def test_options(self):
 
@@ -519,6 +612,14 @@ class TestPersonRUD(TestRest):
                 "original": '{}\n'
             }
         ])
+
+    def test_get(self):
+
+        person = self.sample.person("unit")
+
+        self.assertStatusModel(self.api.get(f"/person/{person.id}"), 200, "person", {
+            "name": "unit"
+        })
 
     def test_patch(self):
 
@@ -613,6 +714,12 @@ class TestTemplateCL(TestRest):
         ])
 
         self.assertEqual(fields.errors, [])
+
+        fields = service.TemplateCL.fields(values={"yaml": "a:1"})
+
+        self.assertFalse(service.TemplateCL.validate(fields))
+
+        self.assertEqual(fields["yaml"].errors, ["must be dict"])
 
     def test_options(self):
 
@@ -789,6 +896,12 @@ class TestTemplateRUD(TestRest):
 
         self.assertEqual(fields.errors, [])
 
+        fields = service.TemplateRUD.fields(values={"yaml": "a:1"})
+
+        self.assertFalse(service.TemplateRUD.validate(fields))
+
+        self.assertEqual(fields["yaml"].errors, ["must be dict"])
+
     @unittest.mock.patch("flask.request")
     def test_retrieve(self, mock_request):
 
@@ -797,17 +910,6 @@ class TestTemplateRUD(TestRest):
         template = self.sample.template("unit", "todo", {"a": 1})
 
         self.assertEqual(service.TemplateRUD.retrieve(template.id).name, "unit")
-
-    def test_get(self):
-
-        template = self.sample.template("unit", "todo", {"a": 1})
-
-        self.assertStatusModel(self.api.get(f"/template/{template.id}"), 200, "template", {
-            "name": "unit",
-            "kind": "todo",
-            "data": {"a": 1},
-            "yaml": "a: 1\n"
-        })
 
     def test_options(self):
 
@@ -922,6 +1024,17 @@ class TestTemplateRUD(TestRest):
                 "original": "a: 1\n"
             }
         ])
+
+    def test_get(self):
+
+        template = self.sample.template("unit", "todo", {"a": 1})
+
+        self.assertStatusModel(self.api.get(f"/template/{template.id}"), 200, "template", {
+            "name": "unit",
+            "kind": "todo",
+            "data": {"a": 1},
+            "yaml": "a: 1\n"
+        })
 
     def test_patch(self):
 
@@ -1071,6 +1184,12 @@ class TestAreaCL(TestRest):
         ])
 
         self.assertEqual(fields.errors, [])
+
+        fields = service.AreaCL.fields(values={"yaml": "a:1"})
+
+        self.assertFalse(service.AreaCL.validate(fields))
+
+        self.assertEqual(fields["yaml"].errors, ["must be dict"])
 
     def test_options(self):
 
@@ -1333,6 +1452,12 @@ class TestAreaRUD(TestRest):
 
         self.assertEqual(fields.errors, [])
 
+        fields = service.AreaRUD.fields(values={"yaml": "a:1"})
+
+        self.assertFalse(service.AreaRUD.validate(fields))
+
+        self.assertEqual(fields["yaml"].errors, ["must be dict"])
+
     @unittest.mock.patch("flask.request")
     def test_retrieve(self, mock_request):
 
@@ -1341,14 +1466,6 @@ class TestAreaRUD(TestRest):
         area = self.sample.area("unit", "test")
 
         self.assertEqual(service.AreaRUD.retrieve(area.id).name, "test")
-
-    def test_get(self):
-
-        area = self.sample.area("unit", "test")
-
-        self.assertStatusModel(self.api.get(f"/area/{area.id}"), 200, "area", {
-            "name": "test"
-        })
 
     def test_options(self):
 
@@ -1521,6 +1638,14 @@ class TestAreaRUD(TestRest):
                 "value": "b: 2"
             }
         ])
+
+    def test_get(self):
+
+        area = self.sample.area("unit", "test")
+
+        self.assertStatusModel(self.api.get(f"/area/{area.id}"), 200, "area", {
+            "name": "test"
+        })
 
     def test_patch(self):
 
@@ -1865,6 +1990,12 @@ class TestActCL(TestRest):
 
         self.assertEqual(fields.errors, [])
 
+        fields = service.ActCL.fields(values={"yaml": "a:1"})
+
+        self.assertFalse(service.ActCL.validate(fields))
+
+        self.assertEqual(fields["yaml"].errors, ["must be dict"])
+
     def test_options(self):
 
         person = self.sample.person("unit")
@@ -2125,6 +2256,12 @@ class TestActRUD(TestRest):
 
         self.assertEqual(fields.errors, [])
 
+        fields = service.ActRUD.fields(values={"yaml": "a:1"})
+
+        self.assertFalse(service.ActRUD.validate(fields))
+
+        self.assertEqual(fields["yaml"].errors, ["must be dict"])
+
     @unittest.mock.patch("flask.request")
     def test_retrieve(self, mock_request):
 
@@ -2133,14 +2270,6 @@ class TestActRUD(TestRest):
         act = self.sample.act("unit", "test")
 
         self.assertEqual(service.ActRUD.retrieve(act.id).name, "test")
-
-    def test_get(self):
-
-        act = self.sample.act("unit", "test")
-
-        self.assertStatusModel(self.api.get(f"/act/{act.id}"), 200, "act", {
-            "name": "test"
-        })
 
     def test_options(self):
 
@@ -2313,6 +2442,14 @@ class TestActRUD(TestRest):
                 "value": "b: 2"
             }
         ])
+
+    def test_get(self):
+
+        act = self.sample.act("unit", "test")
+
+        self.assertStatusModel(self.api.get(f"/act/{act.id}"), 200, "act", {
+            "name": "test"
+        })
 
     def test_patch(self):
 
@@ -2662,6 +2799,12 @@ class TestToDoCL(TestRest):
 
         self.assertEqual(fields.errors, [])
 
+        fields = service.ToDoCL.fields(values={"yaml": "a:1"})
+
+        self.assertFalse(service.ToDoCL.validate(fields))
+
+        self.assertEqual(fields["yaml"].errors, ["must be dict"])
+
     def test_options(self):
 
         person = self.sample.person("unit")
@@ -2923,6 +3066,12 @@ class TestToDoRUD(TestRest):
 
         self.assertEqual(fields.errors, [])
 
+        fields = service.ToDoRUD.fields(values={"yaml": "a:1"})
+
+        self.assertFalse(service.ToDoRUD.validate(fields))
+
+        self.assertEqual(fields["yaml"].errors, ["must be dict"])
+
     @unittest.mock.patch("flask.request")
     def test_retrieve(self, mock_request):
 
@@ -2931,14 +3080,6 @@ class TestToDoRUD(TestRest):
         todo = self.sample.todo("unit", "test")
 
         self.assertEqual(service.ToDoRUD.retrieve(todo.id).name, "test")
-
-    def test_get(self):
-
-        todo = self.sample.todo("unit", "test")
-
-        self.assertStatusModel(self.api.get(f"/todo/{todo.id}"), 200, "todo", {
-            "name": "test"
-        })
 
     def test_options(self):
 
@@ -3111,6 +3252,14 @@ class TestToDoRUD(TestRest):
                 "value": "text: 2"
             }
         ])
+
+    def test_get(self):
+
+        todo = self.sample.todo("unit", "test")
+
+        self.assertStatusModel(self.api.get(f"/todo/{todo.id}"), 200, "todo", {
+            "name": "test"
+        })
 
     def test_patch(self):
 
@@ -3697,6 +3846,12 @@ class TestRoutineCL(TestRest):
 
         self.assertEqual(fields.errors, [])
 
+        fields = service.RoutineCL.fields(values={"yaml": "a:1"})
+
+        self.assertFalse(service.RoutineCL.validate(fields))
+
+        self.assertEqual(fields["yaml"].errors, ["must be dict"])
+
     def test_options(self):
 
         person = self.sample.person("unit")
@@ -3959,7 +4114,13 @@ class TestRoutineRUD(TestRest):
         ])
 
         self.assertEqual(fields.errors, [])
-        
+
+        fields = service.RoutineRUD.fields(values={"yaml": "a:1"})
+
+        self.assertFalse(service.RoutineRUD.validate(fields))
+
+        self.assertEqual(fields["yaml"].errors, ["must be dict"])
+
     @unittest.mock.patch("flask.request")
     def test_retrieve(self, mock_request):
 
@@ -3968,21 +4129,6 @@ class TestRoutineRUD(TestRest):
         routine = self.sample.routine("test", "unit")
 
         self.assertEqual(service.RoutineRUD.retrieve(routine.id).name, "unit")
-
-    def test_get(self):
-
-        routine = self.sample.routine("test", "unit")
-
-        self.assertStatusModel(self.api.get(f"/routine/{routine.id}"), 200, "routine", {
-            "person_id": routine.person_id,
-            "name": "unit",
-            "status": "opened",
-            "created": 7,
-            "data": {
-                "text": "routine it"
-            },
-            "yaml": "text: routine it\n"
-        })
 
     def test_options(self):
 
@@ -4155,6 +4301,21 @@ class TestRoutineRUD(TestRest):
                 "value": "text: 2"
             }
         ])
+
+    def test_get(self):
+
+        routine = self.sample.routine("test", "unit")
+
+        self.assertStatusModel(self.api.get(f"/routine/{routine.id}"), 200, "routine", {
+            "person_id": routine.person_id,
+            "name": "unit",
+            "status": "opened",
+            "created": 7,
+            "data": {
+                "text": "routine it"
+            },
+            "yaml": "text: routine it\n"
+        })
 
     def test_patch(self):
 

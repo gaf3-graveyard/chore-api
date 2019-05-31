@@ -90,6 +90,21 @@ def require_session(endpoint):
     return wrap
 
 
+def validate(fields):
+
+    valid = fields.validate()
+
+    for field in fields.order:
+
+        if field.name != "yaml" or field.value is None:
+            continue
+
+        if not isinstance(yaml.safe_load(field.value), dict):
+            field.errors.append("must be dict")
+            valid = False
+
+    return valid
+            
 def model_in(converted):
 
     fields = {}
@@ -125,7 +140,6 @@ def notify(message):
 
     flask.current_app.redis.publish(flask.current_app.channel, json.dumps(message))
 
-
 class Health(flask_restful.Resource):
     def get(self):
         return {"message": "OK"}
@@ -141,7 +155,7 @@ class RestCL(flask_restful.Resource):
     @staticmethod
     def validate(fields):
 
-        return fields.validate()
+        return validate(fields)
 
     @require_session
     def options(self):
@@ -195,7 +209,7 @@ class RestRUD(flask_restful.Resource):
     @staticmethod
     def validate(fields):
 
-        return fields.validate()
+        return validate(fields)
 
     @classmethod
     def retrieve(self, id):
@@ -205,13 +219,9 @@ class RestRUD(flask_restful.Resource):
         ).get(
             id
         )
+
         flask.request.session.commit()
         return model
-
-    @require_session
-    def get(self, id):
-
-        return {self.SINGULAR: model_out(self.retrieve(id))}
 
     @require_session
     def options(self, id):
@@ -226,6 +236,11 @@ class RestRUD(flask_restful.Resource):
             return {"fields": fields.to_list(), "errors": fields.errors}
         else:
             return {"fields": fields.to_list()}
+
+    @require_session
+    def get(self, id):
+
+        return {self.SINGULAR: model_out(self.retrieve(id))}
 
     @require_session
     def patch(self, id):

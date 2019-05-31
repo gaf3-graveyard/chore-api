@@ -12,7 +12,8 @@ ENVIRONMENT=-e SLEEP=0.1 \
 			-e MYSQL_PORT=3306 \
 			-e REDIS_HOST=redis-klotio \
 			-e REDIS_PORT=6379 \
-			-e REDIS_CHANNEL=nandy.io/chore
+			-e REDIS_CHANNEL=nandy.io/chore \
+			-e PYTHONUNBUFFERED=1
 PORT=6765
 
 .PHONY: cross build kube network shell test db run start stop push install update remove reset tag
