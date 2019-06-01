@@ -1690,6 +1690,7 @@ class TestAreaValue(TestRest):
         # basic 
 
         self.assertEqual(service.AreaValue.build(**{
+            "template_id": 0,
             "data": {
                 "by": "data",
                 "person_id": person.id,
@@ -2501,6 +2502,7 @@ class TestActValue(TestRest):
         # basic 
 
         self.assertEqual(service.ActValue.build(**{
+            "template_id": 0,
             "data": {
                 "by": "data",
                 "person_id": person.id,
@@ -3318,6 +3320,7 @@ class TestToDoAction(TestRest):
         # basic 
 
         self.assertEqual(service.ToDoAction.build(**{
+            "template_id": 0,
             "data": {
                 "by": "data",
                 "person_id": person.id,
@@ -4011,7 +4014,10 @@ class TestRoutineCL(TestRest):
                 "status": "opened",
                 "created": 6,
                 "data": {
-                    "text": "hey"
+                    "text": "hey",
+                    "tasks": [{
+                        "text": "ya"
+                    }]
                 }
             }
         })
@@ -4023,8 +4029,15 @@ class TestRoutineCL(TestRest):
             "created": 6,
             "updated": 7,
             "data": {
+                "start": 7,
                 "text": "hey",
-                "notified": 7
+                "notified": 7,
+                "tasks": [{
+                    "id": 0,
+                    "text": "ya",
+                    "start": 7,
+                    "notified": 7
+                }]
             }
         })
 
@@ -4384,6 +4397,7 @@ class TestRoutineAction(TestRest):
         # explicit 
 
         self.assertEqual(service.RoutineAction.build(**{
+            "template_id": 0,
             "data": {
                 "by": "data",
                 "person_id": person.id,
