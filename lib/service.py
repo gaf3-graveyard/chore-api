@@ -383,7 +383,7 @@ class Status(flask_restful.Resource):
 
         if "template" in kwargs:
             template = kwargs["template"]
-        elif "template_id" in kwargs:
+        elif "template_id" in kwargs and kwargs["template_id"]:
             template = flask.request.session.query(
                 mysql.Template
             ).get(
@@ -918,7 +918,13 @@ class Routine:
     ACTIONS = ["remind", "next", "pause", "unpause", "skip", "unskip", "complete", "uncomplete", "expire", "unexpire"]
 
 class RoutineCL(Routine, StatusCL):
-    pass
+
+    @require_session
+    def post(self):
+
+        model = RoutineAction.create(**model_in(flask.request.json[self.SINGULAR]))
+
+        return {self.SINGULAR: model_out(model)}, 201
 
 class RoutineRUD(Routine, StatusRUD):
     pass
