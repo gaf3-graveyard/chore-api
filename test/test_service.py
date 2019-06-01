@@ -1090,14 +1090,16 @@ class TestAreaCL(TestRest):
                 "options": [0, template.id],
                 "labels": {0: "None", template.id: "test"},
                 "style": "select",
-                "trigger": True
+                "trigger": True,
+                "optional": True
             },
             {
                 "name": "name"
             },
             {
                 "name": "yaml",
-                "style": "textarea"
+                "style": "textarea",
+                "optional": True
             }
         ])
 
@@ -1121,18 +1123,18 @@ class TestAreaCL(TestRest):
                 "labels": {0: "None", template.id: "test"},
                 "style": "select",
                 "trigger": True,
-                "value": template.id
+                "value": template.id,
+                "optional": True
             },
             {
                 "name": "name",
-                "value": "test",
-                "readonly": True
+                "value": "test"
             },
             {
                 "name": "yaml",
                 "style": "textarea",
                 "value": "a: 1\n",
-                "readonly": True
+                "optional": True
             }
         ])
 
@@ -1170,7 +1172,7 @@ class TestAreaCL(TestRest):
                 "labels": {0: "None", template.id: "test"},
                 "style": "select",
                 "trigger": True,
-                "errors": ["missing value"]
+                "optional": True
             },
             {
                 "name": "name",
@@ -1179,7 +1181,7 @@ class TestAreaCL(TestRest):
             {
                 "name": "yaml",
                 "style": "textarea",
-                "errors": ["missing value"]
+                "optional": True
             }
         ])
 
@@ -1217,14 +1219,16 @@ class TestAreaCL(TestRest):
                 "options": [0, template.id],
                 "labels": {'0': "None", str(template.id): "test"},
                 "style": "select",
-                "trigger": True
+                "trigger": True,
+                "optional": True
             },
             {
                 "name": "name"
             },
             {
                 "name": "yaml",
-                "style": "textarea"
+                "style": "textarea",
+                "optional": True
             }
         ])
 
@@ -1254,7 +1258,7 @@ class TestAreaCL(TestRest):
                 "labels": {'0': "None", str(template.id): "test"},
                 "style": "select",
                 "trigger": True,
-                "errors": ["missing value"]
+                "optional": True
             },
             {
                 "name": "name",
@@ -1263,7 +1267,7 @@ class TestAreaCL(TestRest):
             {
                 "name": "yaml",
                 "style": "textarea",
-                "errors": ["missing value"]
+                "optional": True
             }
         ], [
             "unknown field 'nope'"
@@ -1297,18 +1301,18 @@ class TestAreaCL(TestRest):
                 "labels": {'0': "None", str(template.id): "test"},
                 "style": "select",
                 "trigger": True,
+                "optional": True,
                 "value": template.id
             },
             {
                 "name": "name",
-                "value": "test",
-                "readonly": True
+                "value": "test"
             },
             {
                 "name": "yaml",
                 "style": "textarea",
                 "value": "a: 1\n",
-                "readonly": True
+                "optional": True
             }
         ])
 
@@ -1395,7 +1399,8 @@ class TestAreaRUD(TestRest):
             },
             {
                 "name": "yaml",
-                "style": "textarea"
+                "style": "textarea",
+                "optional": True
             }
         ])
 
@@ -1446,7 +1451,7 @@ class TestAreaRUD(TestRest):
             {
                 "name": "yaml",
                 "style": "textarea",
-                "errors": ["missing value"]
+                "optional": True
             }
         ])
 
@@ -1519,6 +1524,7 @@ class TestAreaRUD(TestRest):
             {
                 "name": "yaml",
                 "style": "textarea",
+                "optional": True,
                 "value": "a: 1\n",
                 "original": "a: 1\n"
             }
@@ -1574,7 +1580,7 @@ class TestAreaRUD(TestRest):
                 "name": "yaml",
                 "style": "textarea",
                 "original": "a: 1\n",
-                "errors": ["missing value"]
+                "optional": True
             }
         ], [
             "unknown field 'nope'"
@@ -1634,6 +1640,7 @@ class TestAreaRUD(TestRest):
             {
                 "name": "yaml",
                 "style": "textarea",
+                "optional": True,
                 "original": "a: 1\n",
                 "value": "b: 2"
             }
@@ -1895,14 +1902,16 @@ class TestActCL(TestRest):
                 "options": [0, template.id],
                 "labels": {0: "None", template.id: "test"},
                 "style": "select",
-                "trigger": True
+                "trigger": True,
+                "optional": True
             },
             {
                 "name": "name"
             },
             {
                 "name": "yaml",
-                "style": "textarea"
+                "style": "textarea",
+                "optional": True
             }
         ])
 
@@ -1926,18 +1935,18 @@ class TestActCL(TestRest):
                 "labels": {0: "None", template.id: "test"},
                 "style": "select",
                 "trigger": True,
+                "optional": True,
                 "value": template.id
             },
             {
                 "name": "name",
-                "value": "test",
-                "readonly": True
+                "value": "test"
             },
             {
                 "name": "yaml",
                 "style": "textarea",
                 "value": "a: 1\n",
-                "readonly": True
+                "optional": True
             }
         ])
 
@@ -1975,7 +1984,7 @@ class TestActCL(TestRest):
                 "labels": {0: "None", template.id: "test"},
                 "style": "select",
                 "trigger": True,
-                "errors": ["missing value"]
+                "optional": True
             },
             {
                 "name": "name",
@@ -1984,7 +1993,7 @@ class TestActCL(TestRest):
             {
                 "name": "yaml",
                 "style": "textarea",
-                "errors": ["missing value"]
+                "optional": True
             }
         ])
 
@@ -2022,14 +2031,16 @@ class TestActCL(TestRest):
                 "options": [0, template.id],
                 "labels": {'0': "None", str(template.id): "test"},
                 "style": "select",
-                "trigger": True
+                "trigger": True,
+                "optional": True
             },
             {
                 "name": "name"
             },
             {
                 "name": "yaml",
-                "style": "textarea"
+                "style": "textarea",
+                "optional": True
             }
         ])
 
@@ -2059,7 +2070,7 @@ class TestActCL(TestRest):
                 "labels": {'0': "None", str(template.id): "test"},
                 "style": "select",
                 "trigger": True,
-                "errors": ["missing value"]
+                "optional": True
             },
             {
                 "name": "name",
@@ -2068,7 +2079,7 @@ class TestActCL(TestRest):
             {
                 "name": "yaml",
                 "style": "textarea",
-                "errors": ["missing value"]
+                "optional": True
             }
         ], [
             "unknown field 'nope'"
@@ -2102,18 +2113,18 @@ class TestActCL(TestRest):
                 "labels": {'0': "None", str(template.id): "test"},
                 "style": "select",
                 "trigger": True,
+                "optional": True,
                 "value": template.id
             },
             {
                 "name": "name",
-                "value": "test",
-                "readonly": True
+                "value": "test"
             },
             {
                 "name": "yaml",
                 "style": "textarea",
                 "value": "a: 1\n",
-                "readonly": True
+                "optional": True
             }
         ])
 
@@ -2199,7 +2210,8 @@ class TestActRUD(TestRest):
             },
             {
                 "name": "yaml",
-                "style": "textarea"
+                "style": "textarea",
+                "optional": True
             }
         ])
 
@@ -2250,7 +2262,7 @@ class TestActRUD(TestRest):
             {
                 "name": "yaml",
                 "style": "textarea",
-                "errors": ["missing value"]
+                "optional": True
             }
         ])
 
@@ -2323,6 +2335,7 @@ class TestActRUD(TestRest):
             {
                 "name": "yaml",
                 "style": "textarea",
+                "optional": True,
                 "value": "a: 1\n",
                 "original": "a: 1\n"
             }
@@ -2377,8 +2390,8 @@ class TestActRUD(TestRest):
             {
                 "name": "yaml",
                 "style": "textarea",
-                "original": "a: 1\n",
-                "errors": ["missing value"]
+                "optional": True,
+                "original": "a: 1\n"
             }
         ], [
             "unknown field 'nope'"
@@ -2438,6 +2451,7 @@ class TestActRUD(TestRest):
             {
                 "name": "yaml",
                 "style": "textarea",
+                "optional": True,
                 "original": "a: 1\n",
                 "value": "b: 2"
             }
@@ -2704,14 +2718,16 @@ class TestToDoCL(TestRest):
                 "options": [0, template.id],
                 "labels": {0: "None", template.id: "test"},
                 "style": "select",
-                "trigger": True
+                "trigger": True,
+                "optional": True
             },
             {
                 "name": "name"
             },
             {
                 "name": "yaml",
-                "style": "textarea"
+                "style": "textarea",
+                "optional": True
             }
         ])
 
@@ -2735,18 +2751,18 @@ class TestToDoCL(TestRest):
                 "labels": {0: "None", template.id: "test"},
                 "style": "select",
                 "trigger": True,
+                "optional": True,
                 "value": template.id
             },
             {
                 "name": "name",
-                "value": "test",
-                "readonly": True
+                "value": "test"
             },
             {
                 "name": "yaml",
                 "style": "textarea",
-                "value": "a: 1\n",
-                "readonly": True
+                "optional": True,
+                "value": "a: 1\n"
             }
         ])
 
@@ -2784,7 +2800,7 @@ class TestToDoCL(TestRest):
                 "labels": {0: "None", template.id: "test"},
                 "style": "select",
                 "trigger": True,
-                "errors": ["missing value"]
+                "optional": True
             },
             {
                 "name": "name",
@@ -2793,7 +2809,7 @@ class TestToDoCL(TestRest):
             {
                 "name": "yaml",
                 "style": "textarea",
-                "errors": ["missing value"]
+                "optional": True
             }
         ])
 
@@ -2831,14 +2847,16 @@ class TestToDoCL(TestRest):
                 "options": [0, template.id],
                 "labels": {'0': "None", str(template.id): "test"},
                 "style": "select",
-                "trigger": True
+                "trigger": True,
+                "optional": True
             },
             {
                 "name": "name"
             },
             {
                 "name": "yaml",
-                "style": "textarea"
+                "style": "textarea",
+                "optional": True
             }
         ])
 
@@ -2868,7 +2886,7 @@ class TestToDoCL(TestRest):
                 "labels": {'0': "None", str(template.id): "test"},
                 "style": "select",
                 "trigger": True,
-                "errors": ["missing value"]
+                "optional": True
             },
             {
                 "name": "name",
@@ -2877,7 +2895,7 @@ class TestToDoCL(TestRest):
             {
                 "name": "yaml",
                 "style": "textarea",
-                "errors": ["missing value"]
+                "optional": True
             }
         ], [
             "unknown field 'nope'"
@@ -2911,18 +2929,18 @@ class TestToDoCL(TestRest):
                 "labels": {'0': "None", str(template.id): "test"},
                 "style": "select",
                 "trigger": True,
+                "optional": True,
                 "value": template.id
             },
             {
                 "name": "name",
-                "value": "test",
-                "readonly": True
+                "value": "test"
             },
             {
                 "name": "yaml",
                 "style": "textarea",
                 "value": "a: 1\n",
-                "readonly": True
+                "optional": True
             }
         ])
 
@@ -3009,7 +3027,8 @@ class TestToDoRUD(TestRest):
             },
             {
                 "name": "yaml",
-                "style": "textarea"
+                "style": "textarea",
+                "optional": True
             }
         ])
 
@@ -3060,7 +3079,7 @@ class TestToDoRUD(TestRest):
             {
                 "name": "yaml",
                 "style": "textarea",
-                "errors": ["missing value"]
+                "optional": True
             }
         ])
 
@@ -3133,6 +3152,7 @@ class TestToDoRUD(TestRest):
             {
                 "name": "yaml",
                 "style": "textarea",
+                "optional": True,
                 "value": "text: 1\n",
                 "original": "text: 1\n"
             }
@@ -3187,8 +3207,8 @@ class TestToDoRUD(TestRest):
             {
                 "name": "yaml",
                 "style": "textarea",
-                "original": "text: 1\n",
-                "errors": ["missing value"]
+                "optional": True,
+                "original": "text: 1\n"
             }
         ], [
             "unknown field 'nope'"
@@ -3248,6 +3268,7 @@ class TestToDoRUD(TestRest):
             {
                 "name": "yaml",
                 "style": "textarea",
+                "optional": True,
                 "original": "text: 1\n",
                 "value": "text: 2"
             }
@@ -3751,14 +3772,16 @@ class TestRoutineCL(TestRest):
                 "options": [0, template.id],
                 "labels": {0: "None", template.id: "test"},
                 "style": "select",
-                "trigger": True
+                "trigger": True,
+                "optional": True
             },
             {
                 "name": "name"
             },
             {
                 "name": "yaml",
-                "style": "textarea"
+                "style": "textarea",
+                "optional": True
             }
         ])
 
@@ -3782,18 +3805,18 @@ class TestRoutineCL(TestRest):
                 "labels": {0: "None", template.id: "test"},
                 "style": "select",
                 "trigger": True,
+                "optional": True,
                 "value": template.id
             },
             {
                 "name": "name",
-                "value": "test",
-                "readonly": True
+                "value": "test"
             },
             {
                 "name": "yaml",
                 "style": "textarea",
                 "value": "a: 1\n",
-                "readonly": True
+                "optional": True
             }
         ])
 
@@ -3831,7 +3854,7 @@ class TestRoutineCL(TestRest):
                 "labels": {0: "None", template.id: "test"},
                 "style": "select",
                 "trigger": True,
-                "errors": ["missing value"]
+                "optional": True
             },
             {
                 "name": "name",
@@ -3840,7 +3863,7 @@ class TestRoutineCL(TestRest):
             {
                 "name": "yaml",
                 "style": "textarea",
-                "errors": ["missing value"]
+                "optional": True
             }
         ])
 
@@ -3878,14 +3901,16 @@ class TestRoutineCL(TestRest):
                 "options": [0, template.id],
                 "labels": {'0': "None", str(template.id): "test"},
                 "style": "select",
-                "trigger": True
+                "trigger": True,
+                "optional": True
             },
             {
                 "name": "name"
             },
             {
                 "name": "yaml",
-                "style": "textarea"
+                "style": "textarea",
+                "optional": True
             }
         ])
 
@@ -3915,7 +3940,7 @@ class TestRoutineCL(TestRest):
                 "labels": {'0': "None", str(template.id): "test"},
                 "style": "select",
                 "trigger": True,
-                "errors": ["missing value"]
+                "optional": True
             },
             {
                 "name": "name",
@@ -3924,7 +3949,7 @@ class TestRoutineCL(TestRest):
             {
                 "name": "yaml",
                 "style": "textarea",
-                "errors": ["missing value"]
+                "optional": True
             }
         ], [
             "unknown field 'nope'"
@@ -3958,18 +3983,18 @@ class TestRoutineCL(TestRest):
                 "labels": {'0': "None", str(template.id): "test"},
                 "style": "select",
                 "trigger": True,
+                "optional": True,
                 "value": template.id
             },
             {
                 "name": "name",
-                "value": "test",
-                "readonly": True
+                "value": "test"
             },
             {
                 "name": "yaml",
                 "style": "textarea",
                 "value": "a: 1\n",
-                "readonly": True
+                "optional": True
             }
         ])
 
@@ -4058,7 +4083,8 @@ class TestRoutineRUD(TestRest):
             },
             {
                 "name": "yaml",
-                "style": "textarea"
+                "style": "textarea",
+                "optional": True
             }
         ])
 
@@ -4109,7 +4135,7 @@ class TestRoutineRUD(TestRest):
             {
                 "name": "yaml",
                 "style": "textarea",
-                "errors": ["missing value"]
+                "optional": True
             }
         ])
 
@@ -4182,6 +4208,7 @@ class TestRoutineRUD(TestRest):
             {
                 "name": "yaml",
                 "style": "textarea",
+                "optional": True,
                 "value": "text: 1\n",
                 "original": "text: 1\n"
             }
@@ -4236,8 +4263,8 @@ class TestRoutineRUD(TestRest):
             {
                 "name": "yaml",
                 "style": "textarea",
-                "original": "text: 1\n",
-                "errors": ["missing value"]
+                "optional": True,
+                "original": "text: 1\n"
             }
         ], [
             "unknown field 'nope'"
@@ -4297,6 +4324,7 @@ class TestRoutineRUD(TestRest):
             {
                 "name": "yaml",
                 "style": "textarea",
+                "optional": True,
                 "original": "text: 1\n",
                 "value": "text: 2"
             }

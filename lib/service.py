@@ -164,7 +164,7 @@ class RestCL(flask_restful.Resource):
 
         fields = self.fields(values)
 
-        if values and not self.validate(fields):
+        if values is not None and not self.validate(fields):
             return {"fields": fields.to_list(), "errors": fields.errors}
         else:
             return {"fields": fields.to_list()}
@@ -232,7 +232,7 @@ class RestRUD(flask_restful.Resource):
 
         fields = self.fields(values or originals, originals)
 
-        if values and not self.validate(fields):
+        if values is not None and not self.validate(fields):
             return {"fields": fields.to_list(), "errors": fields.errors}
         else:
             return {"fields": fields.to_list()}
@@ -467,6 +467,7 @@ class StatusCL(Status, RestCL):
                 "options": template_ids,
                 "labels": template_labels,
                 "style": "select",
+                "optional": True,
                 "trigger": True
             },
             {
@@ -474,16 +475,14 @@ class StatusCL(Status, RestCL):
             },
             {
                 "name": "yaml",
-                "style": "textarea"
+                "style": "textarea",
+                "optional": True
             }
         ])
 
         if fields["template_id"].value:
 
             template = model_out(TemplateRUD.retrieve(fields["template_id"].value))
-
-            fields["name"].readonly = True
-            fields["yaml"].readonly = True
 
             fields["name"].value = template["name"]
             fields["yaml"].value = template["yaml"]
@@ -532,7 +531,8 @@ class StatusRUD(Status, RestRUD):
             },
             {
                 "name": "yaml",
-                "style": "textarea"
+                "style": "textarea",
+                "optional": True
             }
         ])
 
