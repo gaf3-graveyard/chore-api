@@ -144,7 +144,7 @@ class Health(flask_restful.Resource):
         return {"message": "OK"}
 
 
-class Rest:
+class Model:
 
     @staticmethod
     def validate(fields):
@@ -163,7 +163,7 @@ class Rest:
         flask.request.session.commit()
         return model
 
-class RestCL(Rest, flask_restful.Resource):
+class RestCL(flask_restful.Resource):
 
     @classmethod
     def fields(cls, values=None, originals=None):
@@ -205,7 +205,7 @@ class RestCL(Rest, flask_restful.Resource):
 
         return {self.PLURAL: models_out(models)}
 
-class RestRUD(Rest, flask_restful.Resource):
+class RestRUD(flask_restful.Resource):
 
     ID = [
         {
@@ -265,7 +265,7 @@ class RestRUD(Rest, flask_restful.Resource):
         return {"deleted": rows}, 202
 
 
-class Person(Rest):
+class Person(Model):
 
     SINGULAR = "person"
     PLURAL = "persons"
@@ -310,7 +310,7 @@ class PersonRUD(Person, RestRUD):
     pass
 
 
-class Template(Rest):
+class Template(Model):
 
     SINGULAR = "template"
     PLURAL = "templates"
@@ -364,7 +364,7 @@ class TemplateRUD(Template, RestRUD):
     pass
 
 
-class Status(Rest):
+class Status(Model):
 
     @staticmethod
     def build(**kwargs):
@@ -438,7 +438,7 @@ class Status(Rest):
         return model
 
 
-class StatusCL(Status, RestCL):
+class StatusCL(RestCL):
 
     @classmethod
     def fields(cls, values=None, originals=None):
@@ -494,7 +494,7 @@ class StatusCL(Status, RestCL):
 
         return {self.SINGULAR: model_out(model)}, 201
 
-class StatusRUD(Status, RestRUD):
+class StatusRUD(RestRUD):
 
     @classmethod
     def fields(cls, values=None, originals=None):
@@ -536,7 +536,7 @@ class StatusRUD(Status, RestRUD):
 
         return fields
 
-class StatusA(Status, RestRUD):
+class StatusA(RestRUD):
 
     @require_session
     def patch(self, id, action):
