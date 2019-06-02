@@ -536,7 +536,7 @@ class StatusRUD(RestRUD):
 
         return fields
 
-class StatusA(RestRUD):
+class StatusA(flask_restful.Resource):
 
     @require_session
     def patch(self, id, action):
