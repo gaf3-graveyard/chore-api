@@ -15,7 +15,6 @@ spec:
       labels:
         app: api
     spec:
-      serviceAccount: api
       containers:
       - name: api
         image: docker.io/nandyio/chore-api:0.1
