@@ -40,18 +40,17 @@ def app():
     api.add_resource(TemplateRUD, '/template/<int:id>')
     api.add_resource(AreaCL, '/area')
     api.add_resource(AreaRUD, '/area/<int:id>')
-    api.add_resource(AreaValue, '/area/<int:id>/<action>')
+    api.add_resource(AreaA, '/area/<int:id>/<action>')
     api.add_resource(ActCL, '/act')
     api.add_resource(ActRUD, '/act/<int:id>')
-    api.add_resource(ActValue, '/act/<int:id>/<action>')
+    api.add_resource(ActA, '/act/<int:id>/<action>')
     api.add_resource(ToDoCL, '/todo')
     api.add_resource(ToDoRUD, '/todo/<int:id>')
-    api.add_resource(ToDoAction, '/todo/<int:id>/<action>')
+    api.add_resource(ToDoA, '/todo/<int:id>/<action>')
     api.add_resource(RoutineCL, '/routine')
     api.add_resource(RoutineRUD, '/routine/<int:id>')
-    api.add_resource(RoutineAction, '/routine/<int:id>/<action>')
-    api.add_resource(TaskAction, '/routine/<int:routine_id>/task/<int:task_id>/<action>')
-
+    api.add_resource(RoutineA, '/routine/<int:id>/<action>')
+    api.add_resource(TaskA, '/routine/<int:routine_id>/task/<int:task_id>/<action>')
 
     return app
 
@@ -145,17 +144,31 @@ class Health(flask_restful.Resource):
         return {"message": "OK"}
 
 
-class RestCL(flask_restful.Resource):
-
-    @classmethod
-    def fields(cls, values=None, originals=None):
-
-        return opengui.Fields(values, originals=originals, fields=copy.deepcopy(cls.FIELDS))
+class Rest:
 
     @staticmethod
     def validate(fields):
 
         return validate(fields)
+
+    @classmethod
+    def retrieve(self, id):
+
+        model = flask.request.session.query(
+            self.MODEL
+        ).get(
+            id
+        )
+
+        flask.request.session.commit()
+        return model
+
+class RestCL(Rest, flask_restful.Resource):
+
+    @classmethod
+    def fields(cls, values=None, originals=None):
+
+        return opengui.Fields(values, originals=originals, fields=copy.deepcopy(cls.FIELDS))
 
     @require_session
     def options(self):
@@ -192,7 +205,7 @@ class RestCL(flask_restful.Resource):
 
         return {self.PLURAL: models_out(models)}
 
-class RestRUD(flask_restful.Resource):
+class RestRUD(Rest, flask_restful.Resource):
 
     ID = [
         {
@@ -205,23 +218,6 @@ class RestRUD(flask_restful.Resource):
     def fields(cls, values=None, originals=None):
 
         return opengui.Fields(values, originals=originals, fields=copy.deepcopy(cls.ID + cls.FIELDS))
-
-    @staticmethod
-    def validate(fields):
-
-        return validate(fields)
-
-    @classmethod
-    def retrieve(self, id):
-
-        model = flask.request.session.query(
-            self.MODEL
-        ).get(
-            id
-        )
-
-        flask.request.session.commit()
-        return model
 
     @require_session
     def options(self, id):
@@ -269,7 +265,8 @@ class RestRUD(flask_restful.Resource):
         return {"deleted": rows}, 202
 
 
-class Person:
+class Person(Rest):
+
     SINGULAR = "person"
     PLURAL = "persons"
     MODEL = mysql.Person
@@ -313,7 +310,8 @@ class PersonRUD(Person, RestRUD):
     pass
 
 
-class Template:
+class Template(Rest):
+
     SINGULAR = "template"
     PLURAL = "templates"
     MODEL = mysql.Template
@@ -359,7 +357,6 @@ class Template:
 
         return (ids, labels)
 
-
 class TemplateCL(Template, RestCL):
     pass
 
@@ -367,7 +364,7 @@ class TemplateRUD(Template, RestRUD):
     pass
 
 
-class Status(flask_restful.Resource):
+class Status(Rest):
 
     @staticmethod
     def build(**kwargs):
@@ -439,6 +436,7 @@ class Status(flask_restful.Resource):
         cls.notify("create", model)
 
         return model
+
 
 class StatusCL(Status, RestCL):
 
@@ -538,8 +536,27 @@ class StatusRUD(Status, RestRUD):
 
         return fields
 
+class StatusA(Status, RestRUD):
+
+    @require_session
+    def patch(self, id, action):
+
+        model = flask.request.session.query(self.MODEL).get(id)
+
+        if action in self.ACTIONS:
+
+            updated = getattr(self, action)(model)
+
+            if updated:
+                flask.request.session.commit()
+
+            return {"updated": updated}, 202
+
 
 class Value(Status):
+
+    STATUSES = ['positive', 'negative']
+    ACTIONS = ["right", "wrong"]
 
     @classmethod
     def wrong(cls, model):
@@ -571,22 +588,76 @@ class Value(Status):
 
         return False
 
-    @require_session
-    def patch(self, id, action):
 
-        model = flask.request.session.query(self.MODEL).get(id)
+class Area(Value):
 
-        if action in self.ACTIONS:
+    SINGULAR = "area"
+    PLURAL = "areas"
+    MODEL = mysql.Area
+    ORDER = [mysql.Area.name]
 
-            updated = getattr(self, action)(model)
+    @classmethod
+    def wrong(cls, model):
+        """
+        Wrongs a model
+        """
 
-            if updated:
-                flask.request.session.commit()
+        if model.status == "positive":
 
-            return {"updated": updated}, 202
+            model.status = "negative"
+            cls.notify("wrong", model)
+
+            if "todo" in model.data:
+                ToDo.create(person_id=model.person.id, data={"area": model.id}, template=model.data["todo"])
+
+            return True
+
+        return False
+
+class AreaCL(Area, StatusCL):
+    pass
+
+class AreaRUD(Area, StatusRUD):
+    pass
+
+class AreaA(Area, StatusA):
+    pass
+
+class Act(Value):
+
+    SINGULAR = "act"
+    PLURAL = "acts"
+    MODEL = mysql.Act
+    ORDER = [mysql.Act.created.desc()]
+
+    @classmethod
+    def create(cls, **kwargs):
+
+        model = cls.MODEL(**cls.build(**kwargs))
+        flask.request.session.add(model)
+        flask.request.session.commit()
+
+        cls.notify("create", model)
+
+        if model.status == "negative" and "todo" in model.data:
+            ToDo.create(person_id=model.person.id, template=model.data["todo"])
+
+        return model
+
+class ActCL(Act, StatusCL):
+    pass
+
+class ActRUD(Act, StatusRUD):
+    pass
+
+class ActA(Act, StatusA):
+    pass
 
 
-class Action(Status):
+class State(Status):
+
+    STATUSES = ['opened', 'closed']
+    ACTIONS = ["remind", "pause", "unpause", "skip", "unskip", "complete", "uncomplete", "expire", "unexpire"]
 
     @classmethod
     def remind(cls, model):
@@ -728,114 +799,13 @@ class Action(Status):
 
         return False
 
-    @require_session
-    def patch(self, id, action):
 
-        model = flask.request.session.query(self.MODEL).get(id)
-
-        if action in self.ACTIONS:
-
-            updated = getattr(self, action)(model)
-
-            if updated:
-                flask.request.session.commit()
-
-            return {"updated": updated}, 202
-
-
-class Area:
-
-    SINGULAR = "area"
-    PLURAL = "areas"
-    MODEL = mysql.Area
-    ORDER = [mysql.Area.name]
-    STATUSES = ['positive', 'negative']
-    ACTIONS = ["right", "wrong"]
-
-class AreaCL(Area, StatusCL):
-    pass
-
-class AreaRUD(Area, StatusRUD):
-    pass
-
-class AreaValue(Area, Value):
-
-    @classmethod
-    def wrong(cls, model):
-        """
-        Wrongs a model
-        """
-
-        if model.status == "positive":
-
-            model.status = "negative"
-            cls.notify("wrong", model)
-
-            if "todo" in model.data:
-                ToDoAction.create(person_id=model.person.id, data={"area": model.id}, template=model.data["todo"])
-
-            return True
-
-        return False
-
-
-class Act:
-
-    SINGULAR = "act"
-    PLURAL = "acts"
-    MODEL = mysql.Act
-    ORDER = [mysql.Act.created.desc()]
-    STATUSES = ['positive', 'negative']
-    ACTIONS = ["right", "wrong"]
-
-class ActCL(Act, StatusCL):
-    pass
-
-class ActRUD(Act, StatusRUD):
-    pass
-
-class ActValue(Act, Value):
-
-    @classmethod
-    def create(cls, **kwargs):
-
-        model = cls.MODEL(**cls.build(**kwargs))
-        flask.request.session.add(model)
-        flask.request.session.commit()
-
-        cls.notify("create", model)
-
-        if model.status == "negative" and "todo" in model.data:
-            ToDoAction.create(person_id=model.person.id, template=model.data["todo"])
-
-        return model
-
-
-class ToDo:
+class ToDo(State):
 
     SINGULAR = "todo"
     PLURAL = "todos"
     MODEL = mysql.ToDo
     ORDER = [mysql.ToDo.created.desc()]
-    STATUSES = ['opened', 'closed']
-    ACTIONS = ["remind", "pause", "unpause", "skip", "unskip", "complete", "uncomplete", "expire", "unexpire"]
-
-class ToDoCL(ToDo, StatusCL):
-
-    @require_session
-    def patch(self):
-
-        updated = ToDoAction.todos(flask.request.json["todos"])
-
-        if updated:
-            flask.request.session.commit()
-
-        return {"updated": updated}, 202
-
-class ToDoRUD(ToDo, StatusRUD):
-    pass
-
-class ToDoAction(ToDo, Action):
 
     @staticmethod
     def todos(data):
@@ -898,38 +868,41 @@ class ToDoAction(ToDo, Action):
             cls.notify("complete", model)
 
             if "area" in model.data:
-                AreaValue.right(flask.request.session.query(mysql.Area).get(model.data["area"]))
+                Area.right(flask.request.session.query(mysql.Area).get(model.data["area"]))
 
             if "act" in model.data:
-                ActValue.create(person_id=model.person.id, status="positive", template=model.data["act"])
+                Act.create(person_id=model.person.id, status="positive", template=model.data["act"])
 
             return True
 
         return False
 
+class ToDoCL(ToDo, StatusCL):
 
-class Routine:
+    @require_session
+    def patch(self):
+
+        updated = ToDo.todos(flask.request.json["todos"])
+
+        if updated:
+            flask.request.session.commit()
+
+        return {"updated": updated}, 202
+
+class ToDoRUD(ToDo, StatusRUD):
+    pass
+
+class ToDoA(ToDo, StatusA):
+    pass
+
+
+class Routine(State):
 
     SINGULAR = "routine"
     PLURAL = "routines"
     MODEL = mysql.Routine
     ORDER = [mysql.Routine.created.desc()]
-    STATUSES = ['opened', 'closed']
-    ACTIONS = ["remind", "next", "pause", "unpause", "skip", "unskip", "complete", "uncomplete", "expire", "unexpire"]
-
-class RoutineCL(Routine, StatusCL):
-
-    @require_session
-    def post(self):
-
-        model = RoutineAction.create(**model_in(flask.request.json[self.SINGULAR]))
-
-        return {self.SINGULAR: model_out(model)}, 201
-
-class RoutineRUD(Routine, StatusRUD):
-    pass
-
-class RoutineAction(Routine, Action):
+    ACTIONS = State.ACTIONS + ["next"]
 
     @staticmethod
     def build(**kwargs):
@@ -937,7 +910,7 @@ class RoutineAction(Routine, Action):
         Builds a routine from a raw fields, template, template id, etc.
         """
 
-        fields = Action.build(**kwargs)
+        fields = State.build(**kwargs)
 
         if fields["data"].get("todos"):
 
@@ -990,9 +963,9 @@ class RoutineAction(Routine, Action):
                 task["start"] = time.time()
 
                 if "paused" in task and task["paused"]:
-                    TaskAction.notify("pause", task, routine)
+                    Task.notify("pause", task, routine)
                 else:
-                    TaskAction.notify("start", task, routine)
+                    Task.notify("start", task, routine)
 
                 return
 
@@ -1022,7 +995,7 @@ class RoutineAction(Routine, Action):
 
         for task in routine.data["tasks"]:
             if "start" in task and "end" not in task:
-                TaskAction.complete(task, routine)
+                Task.complete(task, routine)
                 return True
 
         return False
@@ -1037,8 +1010,19 @@ class RoutineAction(Routine, Action):
 
         return True
 
+class RoutineCL(Routine, StatusCL):
+    pass
 
-class TaskAction(flask_restful.Resource):
+class RoutineRUD(Routine, StatusRUD):
+    pass
+
+class RoutineA(Routine, StatusA):
+    pass
+
+
+class Task:
+
+    ACTIONS = ["remind", "pause", "unpause", "skip", "unskip", "complete", "uncomplete"]
 
     @staticmethod
     def notify(action, task, routine):
@@ -1118,7 +1102,7 @@ class TaskAction(flask_restful.Resource):
                 
             cls.notify("skip", task, routine)
 
-            RoutineAction.check(routine)
+            Routine.check(routine)
 
             return True
 
@@ -1136,7 +1120,7 @@ class TaskAction(flask_restful.Resource):
             del task["end"]
             cls.notify("unskip", task, routine)
 
-            RoutineAction.uncomplete(routine)
+            Routine.uncomplete(routine)
 
             return True
 
@@ -1157,10 +1141,10 @@ class TaskAction(flask_restful.Resource):
 
             cls.notify("complete", task, routine)
 
-            RoutineAction.check(routine)
+            Routine.check(routine)
 
             if "todo" in task:
-                ToDoAction.complete(flask.request.session.query(mysql.ToDo).get(task["todo"]))
+                ToDo.complete(flask.request.session.query(mysql.ToDo).get(task["todo"]))
 
             return True
 
@@ -1177,14 +1161,16 @@ class TaskAction(flask_restful.Resource):
             del task["end"]
             cls.notify("uncomplete", task, routine)
 
-            RoutineAction.uncomplete(routine)
+            Routine.uncomplete(routine)
 
             if "todo" in task:
-                ToDoAction.uncomplete(flask.request.session.query(mysql.ToDo).get(task["todo"]))
+                ToDo.uncomplete(flask.request.session.query(mysql.ToDo).get(task["todo"]))
 
             return True
 
         return False
+
+class TaskA(Task, flask_restful.Resource):
 
     @require_session
     def patch(self, routine_id, task_id, action):
@@ -1192,7 +1178,7 @@ class TaskAction(flask_restful.Resource):
         routine = flask.request.session.query(mysql.Routine).get(routine_id)
         task = routine.data["tasks"][task_id]
 
-        if action in ["remind", "pause", "unpause", "skip", "unskip", "complete", "uncomplete"]:
+        if action in self.ACTIONS:
 
             updated = getattr(self, action)(task, routine)
 
