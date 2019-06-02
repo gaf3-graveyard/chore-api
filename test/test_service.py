@@ -1600,15 +1600,22 @@ class TestAreaCL(TestRest):
 
         area_id = response.json["area"]["id"]
 
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     def test_get(self):
 
-        self.sample.area("unit", "test")
+        self.sample.area("unit", "test", updated=6)
         self.sample.area("test", "unit")
 
         self.assertStatusModels(self.api.get("/area"), 200, "areas", [
             {
                 "name": "test"
             },
+            {
+                "name": "unit"
+            }
+        ])
+
+        self.assertStatusModels(self.api.get("/area?since=0&status=positive"), 200, "areas", [
             {
                 "name": "unit"
             }
@@ -2414,15 +2421,22 @@ class TestActCL(TestRest):
 
         act_id = response.json["act"]["id"]
 
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     def test_get(self):
 
-        self.sample.act("unit", "test")
+        self.sample.act("unit", "test", updated=6)
         self.sample.act("test", "unit")
 
         self.assertStatusModels(self.api.get("/act"), 200, "acts", [
             {
                 "name": "test"
             },
+            {
+                "name": "unit"
+            }
+        ])
+
+        self.assertStatusModels(self.api.get("/act?since=0&status=positive"), 200, "acts", [
             {
                 "name": "unit"
             }
@@ -3393,15 +3407,22 @@ class TestToDoCL(TestRest):
 
         todo_id = response.json["todo"]["id"]
 
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     def test_get(self):
 
-        self.sample.todo("unit", "test")
+        self.sample.todo("unit", "test", updated=6)
         self.sample.todo("test", "unit")
 
         self.assertStatusModels(self.api.get("/todo"), 200, "todos", [
             {
                 "name": "test"
             },
+            {
+                "name": "unit"
+            }
+        ])
+
+        self.assertStatusModels(self.api.get("/todo?since=0&status=opened"), 200, "todos", [
             {
                 "name": "unit"
             }
@@ -4498,6 +4519,7 @@ class TestRoutineCL(TestRest):
             }
         })
 
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     def test_get(self):
 
         self.sample.routine("unit", "test", created=7)
@@ -4509,6 +4531,12 @@ class TestRoutineCL(TestRest):
             },
             {
                 "name": "unit"
+            }
+        ])
+
+        self.assertStatusModels(self.api.get("/routine?since=0&status=opened"), 200, "routines", [
+            {
+                "name": "test"
             }
         ])
 

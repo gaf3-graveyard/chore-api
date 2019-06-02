@@ -66,7 +66,7 @@ class Sample:
 
         return act
 
-    def todo(self, person, name="Unit", status="opened", created=7, updated=8, data=None):
+    def todo(self, person, name="Unit", status=None, created=7, updated=8, data=None):
 
         if data is None:
             data = {}
@@ -91,7 +91,7 @@ class Sample:
 
         return todo
 
-    def routine(self, person, name="Unit", status="opened", created=7, updated=8, data=None, tasks=None):
+    def routine(self, person, name="Unit", status=None, created=7, updated=8, data=None, tasks=None):
 
         if data is None:
             data = {}
