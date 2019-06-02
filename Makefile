@@ -49,6 +49,7 @@ push:
 	docker push $(ACCOUNT)/$(IMAGE):$(VERSION)
 
 install:
+	kubectl create -f kubernetes/mysql.yaml
 	kubectl create -f kubernetes/api.yaml
 
 update:
@@ -56,6 +57,7 @@ update:
 
 remove:
 	-kubectl delete -f kubernetes/api.yaml
+	-kubectl delete -f kubernetes/mysql.yaml
 
 reset: remove install
 

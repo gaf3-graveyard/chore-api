@@ -1,21 +1,20 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  generateName: api-mysql-
+  name: mysql
   namespace: chore-nandy-io
 spec:
+  backoffLimit: 12
   template:
     spec:
-      volumes:
-      - name: subscriptions
-        configMap:
-          name: subscriptions
       containers:
-      - name: api-mysql
+      - name: mysql
         image: docker.io/nandyio/chore-api:0.1
         imagePullPolicy: Always
         command: ["/opt/nandy-io/bin/db.py"]
-        volumeMounts:
-        - name: subscriptions
-          mountPath: /opt/nandy-io/subscriptions
+        env:
+        - name: MYSQL_HOST
+          value: db.mysql-klot-io
+        - name: MYSQL_PORT
+          value: "3306"
       restartPolicy: Never
