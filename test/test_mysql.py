@@ -139,7 +139,7 @@ class TestMySQL(unittest.TestCase):
 
     def test_MySQL(self):
 
-        self.assertEqual(str(self.session.get_bind().url), "mysql+pymysql://root@mysql-klotio:3306/nandy")
+        self.assertEqual(str(self.session.get_bind().url), "mysql+pymysql://root@mysql-klotio:3306/nandy_test")
 
     def test_Person(self):
 
