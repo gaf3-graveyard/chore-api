@@ -494,6 +494,31 @@ class StatusCL(RestCL):
 
         return {self.SINGULAR: model_out(model)}, 201
 
+    @require_session
+    def get(self):
+
+        since = 7
+        filter_by = {}
+
+        for name, value in flask.request.args.to_dict().items():
+            if name == "since":
+                since = float(value)
+            else:
+                filter_by[name] = value
+
+        models = flask.request.session.query(
+            self.MODEL
+        ).filter_by(
+            **filter_by
+        ).filter(
+            self.MODEL.updated>time.time()-since*60*60*24
+        ).order_by(
+            *self.ORDER
+        ).all()
+        flask.request.session.commit()
+
+        return {self.PLURAL: models_out(models)}
+
 class StatusRUD(RestRUD):
 
     @classmethod
