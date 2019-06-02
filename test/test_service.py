@@ -63,6 +63,31 @@ class TestRest(unittest.TestCase):
         self.session.close()
         mysql.drop_database()
 
+    def assertStatusFields(self, response, code, fields, errors=None):
+
+        self.assertEqual(response.status_code, code, response.json)
+
+        self.assertEqual(len(fields), len(response.json['fields']), "fields")
+
+        for index, field in enumerate(fields):
+            self.assertEqual(field, response.json['fields'][index], index)
+
+        if errors or "errors" in response.json:
+
+            self.assertIsNotNone(errors, response.json)
+            self.assertIn("errors", response.json, response.json)
+
+            self.assertEqual(errors, response.json['errors'], "errors")
+
+    def assertFields(self, fields, data):
+
+        items = fields.to_list()
+
+        self.assertEqual(len(items), len(data), "fields")
+
+        for index, field in enumerate(items):
+            self.assertEqual(field, data[index], index)
+
     def assertStatusValue(self, response, code, key, value):
 
         self.assertEqual(response.status_code, code, response.json)
@@ -192,7 +217,7 @@ class TestService(TestRest):
             }
         ])
         self.assertFalse(service.validate(fields))
-        self.assertEqual(fields.to_list(), [
+        self.assertFields(fields, [
             {
                 "name": "name",
                 "errors": ["missing value"]
@@ -215,7 +240,7 @@ class TestService(TestRest):
             }
         ])
         self.assertFalse(service.validate(fields))
-        self.assertEqual(fields.to_list(), [
+        self.assertFields(fields, [
             {
                 "name": "name",
                 "errors": ["missing value"]
@@ -239,7 +264,7 @@ class TestService(TestRest):
             }
         ])
         self.assertFalse(service.validate(fields))
-        self.assertEqual(fields.to_list(), [
+        self.assertFields(fields, [
             {
                 "name": "name",
                 "value": "yup"
@@ -264,7 +289,7 @@ class TestService(TestRest):
             }
         ])
         self.assertTrue(service.validate(fields))
-        self.assertEqual(fields.to_list(), [
+        self.assertFields(fields, [
             {
                 "name": "name",
                 "value": "yup"
@@ -357,6 +382,57 @@ class TestHealth(TestRest):
 
 class TestPerson(TestRest):
     
+    def test_validate(self):
+
+        fields = service.PersonCL.fields(values={"yaml": "a:1"})
+
+        self.assertFalse(service.Person.validate(fields))
+
+        self.assertFields(fields, [
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "optional": True,
+                "value": "a:1",
+                "errors": ["must be dict"]
+            }
+        ])
+
+        fields = service.PersonRUD.fields(values={"yaml": "a:1"})
+
+        self.assertFalse(service.Person.validate(fields))
+
+        self.assertFields(fields, [
+            {
+                "name": "id",
+                "readonly": True
+            },
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "optional": True,
+                "value": "a:1",
+                "errors": ["must be dict"]
+            }
+        ])
+
+    @unittest.mock.patch("flask.request")
+    def test_retrieve(self, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+
+        self.assertEqual(service.Person.retrieve(person.id).name, "unit")
+
     @unittest.mock.patch("flask.request")
     def test_choices(self, mock_request):
 
@@ -382,26 +458,6 @@ class TestPersonCL(TestRest):
                 "name": "yaml",
                 "style": "textarea",
                 "optional": True
-            }
-        ])
-
-    def test_validate(self):
-
-        fields = service.PersonCL.fields(values={"yaml": "a:1"})
-
-        self.assertFalse(service.PersonCL.validate(fields))
-
-        self.assertEqual(fields.to_list(), [
-            {
-                "name": "name",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "yaml",
-                "style": "textarea",
-                "optional": True,
-                "value": "a:1",
-                "errors": ["must be dict"]
             }
         ])
 
@@ -502,39 +558,6 @@ class TestPersonRUD(TestRest):
                 "optional": True
             }
         ])
-
-    def test_validate(self):
-
-        fields = service.PersonRUD.fields(values={"yaml": "a:1"})
-
-        self.assertFalse(service.PersonRUD.validate(fields))
-
-        self.assertEqual(fields.to_list(), [
-            {
-                "name": "id",
-                "readonly": True
-            },
-            {
-                "name": "name",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "yaml",
-                "style": "textarea",
-                "optional": True,
-                "value": "a:1",
-                "errors": ["must be dict"]
-            }
-        ])
-
-    @unittest.mock.patch("flask.request")
-    def test_retrieve(self, mock_request):
-
-        mock_request.session = self.session
-
-        person = self.sample.person("unit")
-
-        self.assertEqual(service.PersonRUD.retrieve(person.id).name, "unit")
 
     def test_options(self):
 
@@ -646,6 +669,91 @@ class TestPersonRUD(TestRest):
 
 class TestTemplate(TestRest):
 
+    def test_validate(self):
+
+        fields = service.TemplateCL.fields()
+
+        self.assertFalse(service.Template.validate(fields))
+
+        self.assertFields(fields, [
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "kind",
+                "options": [
+                    "area",
+                    "act",
+                    "todo",
+                    "routine"
+                ],
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "errors": ["missing value"]
+            }
+        ])
+
+        self.assertEqual(fields.errors, [])
+
+        fields = service.TemplateCL.fields(values={"yaml": "a:1"})
+
+        self.assertFalse(service.Template.validate(fields))
+
+        self.assertEqual(fields["yaml"].errors, ["must be dict"])
+
+        fields = service.TemplateRUD.fields()
+
+        self.assertFalse(service.Template.validate(fields))
+
+        self.assertFields(fields, [
+            {
+                "name": "id",
+                "readonly": True
+            },
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "kind",
+                "options": [
+                    "area",
+                    "act",
+                    "todo",
+                    "routine"
+                ],
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "errors": ["missing value"]
+            }
+        ])
+
+        self.assertEqual(fields.errors, [])
+
+        fields = service.TemplateRUD.fields(values={"yaml": "a:1"})
+
+        self.assertFalse(service.Template.validate(fields))
+
+        self.assertEqual(fields["yaml"].errors, ["must be dict"])
+
+    @unittest.mock.patch("flask.request")
+    def test_retrieve(self, mock_request):
+
+        mock_request.session = self.session
+
+        template = self.sample.template("unit", "todo", {"a": 1})
+
+        self.assertEqual(service.Template.retrieve(template.id).name, "unit")
+
     @unittest.mock.patch("flask.request")
     def test_choices(self, mock_request):
 
@@ -683,43 +791,6 @@ class TestTemplateCL(TestRest):
                 "style": "textarea"
             }
         ])
-
-    def test_validate(self):
-
-        fields = service.TemplateCL.fields()
-
-        self.assertFalse(service.TemplateCL.validate(fields))
-
-        self.assertEqual(fields.to_list(), [
-            {
-                "name": "name",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "kind",
-                "options": [
-                    "area",
-                    "act",
-                    "todo",
-                    "routine"
-                ],
-                "style": "radios",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "yaml",
-                "style": "textarea",
-                "errors": ["missing value"]
-            }
-        ])
-
-        self.assertEqual(fields.errors, [])
-
-        fields = service.TemplateCL.fields(values={"yaml": "a:1"})
-
-        self.assertFalse(service.TemplateCL.validate(fields))
-
-        self.assertEqual(fields["yaml"].errors, ["must be dict"])
 
     def test_options(self):
 
@@ -860,56 +931,6 @@ class TestTemplateRUD(TestRest):
                 "style": "textarea"
             }
         ])
-
-    def test_validate(self):
-
-        fields = service.TemplateRUD.fields()
-
-        self.assertFalse(service.TemplateRUD.validate(fields))
-
-        self.assertEqual(fields.to_list(), [
-            {
-                "name": "id",
-                "readonly": True
-            },
-            {
-                "name": "name",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "kind",
-                "options": [
-                    "area",
-                    "act",
-                    "todo",
-                    "routine"
-                ],
-                "style": "radios",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "yaml",
-                "style": "textarea",
-                "errors": ["missing value"]
-            }
-        ])
-
-        self.assertEqual(fields.errors, [])
-
-        fields = service.TemplateRUD.fields(values={"yaml": "a:1"})
-
-        self.assertFalse(service.TemplateRUD.validate(fields))
-
-        self.assertEqual(fields["yaml"].errors, ["must be dict"])
-
-    @unittest.mock.patch("flask.request")
-    def test_retrieve(self, mock_request):
-
-        mock_request.session = self.session
-
-        template = self.sample.template("unit", "todo", {"a": 1})
-
-        self.assertEqual(service.TemplateRUD.retrieve(template.id).name, "unit")
 
     def test_options(self):
 
@@ -1061,6 +1082,296 @@ class TestTemplateRUD(TestRest):
         self.assertStatusModels(self.api.get("/template"), 200, "templates", [])
 
 
+class TestArea(TestRest):
+
+    @unittest.mock.patch("flask.request")
+    def test_validate(self, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+        template = self.sample.template("test", "area", {"a": 1})
+
+        fields = service.AreaCL.fields()
+
+        self.assertFalse(service.Area.validate(fields))
+
+        self.assertFields(fields, [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "status",
+                "options": ['positive', 'negative'],
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {0: "None", template.id: "test"},
+                "style": "select",
+                "trigger": True,
+                "optional": True
+            },
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "optional": True
+            }
+        ])
+
+        self.assertEqual(fields.errors, [])
+
+        fields = service.AreaCL.fields(values={"yaml": "a:1"})
+
+        self.assertFalse(service.Area.validate(fields))
+
+        self.assertEqual(fields["yaml"].errors, ["must be dict"])
+
+        fields = service.AreaRUD.fields()
+
+        self.assertFalse(service.Area.validate(fields))
+
+        self.assertFields(fields, [
+            {
+                "name": "id",
+                "readonly": True
+            },
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "status",
+                "options": ['positive', 'negative'],
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "created",
+                "style": "datetime",
+                "readonly": True
+            },
+            {
+                "name": "updated",
+                "style": "datetime",
+                "readonly": True
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "optional": True
+            }
+        ])
+
+        self.assertEqual(fields.errors, [])
+
+        fields = service.AreaRUD.fields(values={"yaml": "a:1"})
+
+        self.assertFalse(service.Area.validate(fields))
+
+        self.assertEqual(fields["yaml"].errors, ["must be dict"])
+
+    @unittest.mock.patch("flask.request")
+    def test_retrieve(self, mock_request):
+
+        mock_request.session = self.session
+
+        area = self.sample.area("unit", "test")
+
+        self.assertEqual(service.Area.retrieve(area.id).name, "test")
+
+    @unittest.mock.patch("flask.request")
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    def test_build(self, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+
+        # basic 
+
+        self.assertEqual(service.Area.build(**{
+            "template_id": 0,
+            "data": {
+                "by": "data",
+                "person_id": person.id,
+                "name": "hey",
+                "status": "positive",
+                "created": 1,
+                "updated": 2
+            }
+        }), {
+            "person_id": person.id,
+            "name": "hey",
+            "status": "positive",
+            "created": 1,
+            "updated": 2,
+            "data": {
+                "by": "data",
+                "person_id": person.id,
+                "name": "hey",
+                "status": "positive",
+                "created": 1,
+                "updated": 2
+            }
+        })
+
+        # template by data, person by name
+
+        self.assertEqual(service.Area.build(**{
+            "template": {
+                "by": "template",
+                "name": "hey",
+                "person": "unit"
+            }
+        }), {
+            "name": "hey",
+            "person_id": person.id,
+            "data": {
+                "by": "template",
+                "name": "hey",
+                "person": "unit"
+            }
+        })
+
+        # template by id, person by name in template
+
+        template = self.sample.template("unit", "routine", data={
+            "by": "template_id",
+            "status": "negative"
+        })
+
+        self.assertEqual(service.Area.build(**{
+            "name": "hey",
+            "template_id": template.id
+        }), {
+            "name": "hey",
+            "status": "negative",
+            "data": {
+                "by": "template_id",
+                "status": "negative"
+            }
+        })
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.notify")
+    def test_notify(self, mock_notify):
+
+        model = self.sample.area("unit", "test")
+
+        service.Area.notify("test", model)
+
+        self.assertEqual(model.updated, 7)
+        self.assertEqual(model.data["notified"], 7)
+
+        mock_notify.assert_called_once_with({
+            "kind": "area",
+            "action": "test",
+            "area": service.model_out(model),
+            "person": service.model_out(model.person)
+        })
+
+    @unittest.mock.patch("flask.request")
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.notify")
+    def test_create(self, mock_notify, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+
+        model = service.Area.create(**{
+            "person_id": person.id,
+            "name": "unit",
+            "created": 6,
+            "data": {
+                "text": "hey"
+            }
+        })
+
+        self.assertEqual(model.person_id, person.id)
+        self.assertEqual(model.name, "unit")
+        self.assertEqual(model.status, "positive")
+        self.assertEqual(model.created, 6)
+        self.assertEqual(model.updated, 7)
+        self.assertEqual(model.data, {
+            "text": "hey",
+            "notified": 7
+        })
+
+        item = self.session.query(mysql.Area).get(model.id)
+        flask.request.session.commit()
+        self.assertEqual(item.name, "unit")
+
+        mock_notify.assert_called_once_with({
+            "kind": "area",
+            "action": "create",
+            "area": service.model_out(model),
+            "person": service.model_out(model.person)
+        })
+
+    @unittest.mock.patch("flask.request")
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.Status.notify")
+    def test_wrong(self, mock_notify, mock_request):
+
+        mock_request.session = self.session
+
+        model = self.sample.area("unit", "hey", data={
+            "todo": {
+                "name": "Unit",
+                "text": "test"
+            }
+        })
+
+        self.assertTrue(service.Area.wrong(model))
+        self.assertEqual(model.status, "negative")
+        item = self.session.query(mysql.ToDo).all()[0]
+        self.assertEqual(item.person.id, model.person.id)
+        self.assertEqual(item.name, "Unit")
+        self.assertEqual(item.data["text"], "test")
+        self.assertEqual(item.data["area"], model.id)
+        mock_notify.assert_has_calls([
+            unittest.mock.call("wrong", model),
+            unittest.mock.call("create", item)
+        ])
+
+        self.assertFalse(service.Area.wrong(model))
+        self.assertEqual(mock_notify.call_count, 2)
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.Status.notify")
+    def test_right(self, mock_notify):
+
+        model = self.sample.area("unit", "hey", status="negative")
+
+        self.assertTrue(service.Area.right(model))
+        self.assertEqual(model.status, "positive")
+        mock_notify.assert_called_once_with("right", model)
+
+        self.assertFalse(service.Area.right(model))
+        mock_notify.assert_called_once()
+
 class TestAreaCL(TestRest):
 
     @unittest.mock.patch("flask.request")
@@ -1137,61 +1448,6 @@ class TestAreaCL(TestRest):
                 "optional": True
             }
         ])
-
-    @unittest.mock.patch("flask.request")
-    def test_validate(self, mock_request):
-
-        mock_request.session = self.session
-
-        person = self.sample.person("unit")
-        template = self.sample.template("test", "area", {"a": 1})
-
-        fields = service.AreaCL.fields()
-
-        self.assertFalse(service.AreaCL.validate(fields))
-
-        self.assertEqual(fields.to_list(), [
-            {
-                "name": "person_id",
-                "label": "person",
-                "options": [person.id],
-                "labels": {person.id: "unit"},
-                "style": "radios",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "status",
-                "options": ['positive', 'negative'],
-                "style": "radios",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "template_id",
-                "label": "template",
-                "options": [0, template.id],
-                "labels": {0: "None", template.id: "test"},
-                "style": "select",
-                "trigger": True,
-                "optional": True
-            },
-            {
-                "name": "name",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "yaml",
-                "style": "textarea",
-                "optional": True
-            }
-        ])
-
-        self.assertEqual(fields.errors, [])
-
-        fields = service.AreaCL.fields(values={"yaml": "a:1"})
-
-        self.assertFalse(service.AreaCL.validate(fields))
-
-        self.assertEqual(fields["yaml"].errors, ["must be dict"])
 
     def test_options(self):
 
@@ -1404,74 +1660,6 @@ class TestAreaRUD(TestRest):
             }
         ])
 
-    @unittest.mock.patch("flask.request")
-    def test_validate(self, mock_request):
-
-        mock_request.session = self.session
-
-        person = self.sample.person("unit")
-
-        fields = service.AreaRUD.fields()
-
-        self.assertFalse(service.AreaRUD.validate(fields))
-
-        self.assertEqual(fields.to_list(), [
-            {
-                "name": "id",
-                "readonly": True
-            },
-            {
-                "name": "person_id",
-                "label": "person",
-                "options": [person.id],
-                "labels": {person.id: "unit"},
-                "style": "radios",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "status",
-                "options": ['positive', 'negative'],
-                "style": "radios",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "name",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "created",
-                "style": "datetime",
-                "readonly": True
-            },
-            {
-                "name": "updated",
-                "style": "datetime",
-                "readonly": True
-            },
-            {
-                "name": "yaml",
-                "style": "textarea",
-                "optional": True
-            }
-        ])
-
-        self.assertEqual(fields.errors, [])
-
-        fields = service.AreaRUD.fields(values={"yaml": "a:1"})
-
-        self.assertFalse(service.AreaRUD.validate(fields))
-
-        self.assertEqual(fields["yaml"].errors, ["must be dict"])
-
-    @unittest.mock.patch("flask.request")
-    def test_retrieve(self, mock_request):
-
-        mock_request.session = self.session
-
-        area = self.sample.area("unit", "test")
-
-        self.assertEqual(service.AreaRUD.retrieve(area.id).name, "test")
-
     def test_options(self):
 
         unit = self.sample.person("unit")
@@ -1677,7 +1865,148 @@ class TestAreaRUD(TestRest):
 
         self.assertStatusModels(self.api.get("/area"), 200, "areas", [])
 
-class TestAreaValue(TestRest):
+class TestAreaA(TestRest):
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.notify", unittest.mock.MagicMock)
+    def test_patch(self):
+
+        model = self.sample.area("unit", "hey")
+
+        # wrong
+
+        self.assertStatusValue(self.api.patch(f"/area/{model.id}/wrong"), 202, "updated", True)
+        item = self.session.query(mysql.Area).get(model.id)
+        self.session.commit()
+        self.assertEqual(item.status, "negative")
+        self.assertStatusValue(self.api.patch(f"/area/{model.id}/wrong"), 202, "updated", False)
+
+        # right
+
+        self.assertStatusValue(self.api.patch(f"/area/{model.id}/right"), 202, "updated", True)
+        item = self.session.query(mysql.Area).get(model.id)
+        self.session.commit()
+        self.assertEqual(item.status, "positive")
+        self.assertStatusValue(self.api.patch(f"/area/{model.id}/right"), 202, "updated", False)
+
+
+class TestAct(TestRest):
+
+    @unittest.mock.patch("flask.request")
+    def test_validate(self, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+        template = self.sample.template("test", "act", {"a": 1})
+
+        fields = service.ActCL.fields()
+
+        self.assertFalse(service.Act.validate(fields))
+
+        self.assertFields(fields, [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "status",
+                "options": ['positive', 'negative'],
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {0: "None", template.id: "test"},
+                "style": "select",
+                "trigger": True,
+                "optional": True
+            },
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "optional": True
+            }
+        ])
+
+        self.assertEqual(fields.errors, [])
+
+        fields = service.ActCL.fields(values={"yaml": "a:1"})
+
+        self.assertFalse(service.Act.validate(fields))
+
+        self.assertEqual(fields["yaml"].errors, ["must be dict"])
+
+        fields = service.ActRUD.fields()
+
+        self.assertFalse(service.Act.validate(fields))
+
+        self.assertFields(fields, [
+            {
+                "name": "id",
+                "readonly": True
+            },
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "status",
+                "options": ['positive', 'negative'],
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "created",
+                "style": "datetime",
+                "readonly": True
+            },
+            {
+                "name": "updated",
+                "style": "datetime",
+                "readonly": True
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "optional": True
+            }
+        ])
+
+        self.assertEqual(fields.errors, [])
+
+        fields = service.ActRUD.fields(values={"yaml": "a:1"})
+
+        self.assertFalse(service.Act.validate(fields))
+
+        self.assertEqual(fields["yaml"].errors, ["must be dict"])
+
+    @unittest.mock.patch("flask.request")
+    def test_retrieve(self, mock_request):
+
+        mock_request.session = self.session
+
+        act = self.sample.act("unit", "test")
+
+        self.assertEqual(service.Act.retrieve(act.id).name, "test")
 
     @unittest.mock.patch("flask.request")
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
@@ -1689,7 +2018,7 @@ class TestAreaValue(TestRest):
 
         # basic 
 
-        self.assertEqual(service.AreaValue.build(**{
+        self.assertEqual(service.Act.build(**{
             "template_id": 0,
             "data": {
                 "by": "data",
@@ -1717,7 +2046,7 @@ class TestAreaValue(TestRest):
 
         # template by data, person by name
 
-        self.assertEqual(service.AreaValue.build(**{
+        self.assertEqual(service.Act.build(**{
             "template": {
                 "by": "template",
                 "name": "hey",
@@ -1740,7 +2069,7 @@ class TestAreaValue(TestRest):
             "status": "negative"
         })
 
-        self.assertEqual(service.AreaValue.build(**{
+        self.assertEqual(service.Act.build(**{
             "name": "hey",
             "template_id": template.id
         }), {
@@ -1756,17 +2085,17 @@ class TestAreaValue(TestRest):
     @unittest.mock.patch("service.notify")
     def test_notify(self, mock_notify):
 
-        model = self.sample.area("unit", "test")
+        model = self.sample.act("unit", "test")
 
-        service.AreaValue.notify("test", model)
+        service.Act.notify("test", model)
 
         self.assertEqual(model.updated, 7)
         self.assertEqual(model.data["notified"], 7)
 
         mock_notify.assert_called_once_with({
-            "kind": "area",
+            "kind": "act",
             "action": "test",
-            "area": service.model_out(model),
+            "act": service.model_out(model),
             "person": service.model_out(model.person)
         })
 
@@ -1779,99 +2108,82 @@ class TestAreaValue(TestRest):
 
         person = self.sample.person("unit")
 
-        model = service.AreaValue.create(**{
+        model = service.Act.create(**{
             "person_id": person.id,
             "name": "unit",
+            "status": "negative",
             "created": 6,
             "data": {
-                "text": "hey"
+                "text": "hey",
+                "todo": {
+                    "name": "Unit",
+                    "text": "test"
+                }
             }
         })
 
         self.assertEqual(model.person_id, person.id)
         self.assertEqual(model.name, "unit")
-        self.assertEqual(model.status, "positive")
+        self.assertEqual(model.status, "negative")
         self.assertEqual(model.created, 6)
         self.assertEqual(model.updated, 7)
         self.assertEqual(model.data, {
             "text": "hey",
-            "notified": 7
-        })
-
-        item = self.session.query(mysql.Area).get(model.id)
-        flask.request.session.commit()
-        self.assertEqual(item.name, "unit")
-
-        mock_notify.assert_called_once_with({
-            "kind": "area",
-            "action": "create",
-            "area": service.model_out(model),
-            "person": service.model_out(model.person)
-        })
-
-    @unittest.mock.patch("flask.request")
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.Status.notify")
-    def test_wrong(self, mock_notify, mock_request):
-
-        mock_request.session = self.session
-
-        model = self.sample.area("unit", "hey", data={
+            "notified": 7,
             "todo": {
                 "name": "Unit",
                 "text": "test"
             }
         })
 
-        self.assertTrue(service.AreaValue.wrong(model))
-        self.assertEqual(model.status, "negative")
-        item = self.session.query(mysql.ToDo).all()[0]
-        self.assertEqual(item.person.id, model.person.id)
-        self.assertEqual(item.name, "Unit")
-        self.assertEqual(item.data["text"], "test")
-        self.assertEqual(item.data["area"], model.id)
+        todo = self.session.query(mysql.ToDo).filter_by(name="Unit").all()[0]
+        flask.request.session.commit()
+        self.assertEqual(todo.data["text"], "test")
+
+        item = self.session.query(mysql.Act).get(model.id)
+        flask.request.session.commit()
+        self.assertEqual(item.name, "unit")
+
         mock_notify.assert_has_calls([
-            unittest.mock.call("wrong", model),
-            unittest.mock.call("create", item)
+            unittest.mock.call({
+                "kind": "act",
+                "action": "create",
+                "act": service.model_out(model),
+                "person": service.model_out(model.person)
+            }),
+            unittest.mock.call({
+                "kind": "todo",
+                "action": "create",
+                "todo": service.model_out(todo),
+                "person": service.model_out(todo.person)
+            })
         ])
 
-        self.assertFalse(service.AreaValue.wrong(model))
-        self.assertEqual(mock_notify.call_count, 2)
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.Status.notify")
+    def test_wrong(self, mock_notify):
+
+        model = self.sample.act("unit", "hey")
+
+        self.assertTrue(service.Act.wrong(model))
+        self.assertEqual(model.status, "negative")
+        mock_notify.assert_called_once_with("wrong", model)
+
+        self.assertFalse(service.Act.wrong(model))
+        mock_notify.assert_called_once()
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     @unittest.mock.patch("service.Status.notify")
     def test_right(self, mock_notify):
 
-        model = self.sample.area("unit", "hey", status="negative")
+        model = self.sample.act("unit", "hey", status="negative")
 
-        self.assertTrue(service.AreaValue.right(model))
+        self.assertTrue(service.Act.right(model))
         self.assertEqual(model.status, "positive")
         mock_notify.assert_called_once_with("right", model)
 
-        self.assertFalse(service.AreaValue.right(model))
+        self.assertFalse(service.Act.right(model))
         mock_notify.assert_called_once()
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.notify", unittest.mock.MagicMock)
-    def test_patch(self):
-
-        model = self.sample.area("unit", "hey")
-
-        # wrong
-
-        self.assertStatusValue(self.api.patch(f"/area/{model.id}/wrong"), 202, "updated", True)
-        item = self.session.query(mysql.Area).get(model.id)
-        self.session.commit()
-        self.assertEqual(item.status, "negative")
-        self.assertStatusValue(self.api.patch(f"/area/{model.id}/wrong"), 202, "updated", False)
-
-        # right
-
-        self.assertStatusValue(self.api.patch(f"/area/{model.id}/right"), 202, "updated", True)
-        item = self.session.query(mysql.Area).get(model.id)
-        self.session.commit()
-        self.assertEqual(item.status, "positive")
-        self.assertStatusValue(self.api.patch(f"/area/{model.id}/right"), 202, "updated", False)
 
 
 class TestActCL(TestRest):
@@ -1950,61 +2262,6 @@ class TestActCL(TestRest):
                 "optional": True
             }
         ])
-
-    @unittest.mock.patch("flask.request")
-    def test_validate(self, mock_request):
-
-        mock_request.session = self.session
-
-        person = self.sample.person("unit")
-        template = self.sample.template("test", "act", {"a": 1})
-
-        fields = service.ActCL.fields()
-
-        self.assertFalse(service.ActCL.validate(fields))
-
-        self.assertEqual(fields.to_list(), [
-            {
-                "name": "person_id",
-                "label": "person",
-                "options": [person.id],
-                "labels": {person.id: "unit"},
-                "style": "radios",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "status",
-                "options": ['positive', 'negative'],
-                "style": "radios",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "template_id",
-                "label": "template",
-                "options": [0, template.id],
-                "labels": {0: "None", template.id: "test"},
-                "style": "select",
-                "trigger": True,
-                "optional": True
-            },
-            {
-                "name": "name",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "yaml",
-                "style": "textarea",
-                "optional": True
-            }
-        ])
-
-        self.assertEqual(fields.errors, [])
-
-        fields = service.ActCL.fields(values={"yaml": "a:1"})
-
-        self.assertFalse(service.ActCL.validate(fields))
-
-        self.assertEqual(fields["yaml"].errors, ["must be dict"])
 
     def test_options(self):
 
@@ -2172,6 +2429,7 @@ class TestActCL(TestRest):
         ])
 
 class TestActRUD(TestRest):
+
     @unittest.mock.patch("flask.request")
     def test_fields(self, mock_request):
 
@@ -2215,74 +2473,6 @@ class TestActRUD(TestRest):
                 "optional": True
             }
         ])
-
-    @unittest.mock.patch("flask.request")
-    def test_validate(self, mock_request):
-
-        mock_request.session = self.session
-
-        person = self.sample.person("unit")
-
-        fields = service.ActRUD.fields()
-
-        self.assertFalse(service.ActRUD.validate(fields))
-
-        self.assertEqual(fields.to_list(), [
-            {
-                "name": "id",
-                "readonly": True
-            },
-            {
-                "name": "person_id",
-                "label": "person",
-                "options": [person.id],
-                "labels": {person.id: "unit"},
-                "style": "radios",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "status",
-                "options": ['positive', 'negative'],
-                "style": "radios",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "name",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "created",
-                "style": "datetime",
-                "readonly": True
-            },
-            {
-                "name": "updated",
-                "style": "datetime",
-                "readonly": True
-            },
-            {
-                "name": "yaml",
-                "style": "textarea",
-                "optional": True
-            }
-        ])
-
-        self.assertEqual(fields.errors, [])
-
-        fields = service.ActRUD.fields(values={"yaml": "a:1"})
-
-        self.assertFalse(service.ActRUD.validate(fields))
-
-        self.assertEqual(fields["yaml"].errors, ["must be dict"])
-
-    @unittest.mock.patch("flask.request")
-    def test_retrieve(self, mock_request):
-
-        mock_request.session = self.session
-
-        act = self.sample.act("unit", "test")
-
-        self.assertEqual(service.ActRUD.retrieve(act.id).name, "test")
 
     def test_options(self):
 
@@ -2489,184 +2679,7 @@ class TestActRUD(TestRest):
 
         self.assertStatusModels(self.api.get("/act"), 200, "acts", [])
 
-class TestActValue(TestRest):
-
-    @unittest.mock.patch("flask.request")
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    def test_build(self, mock_request):
-
-        mock_request.session = self.session
-
-        person = self.sample.person("unit")
-
-        # basic 
-
-        self.assertEqual(service.ActValue.build(**{
-            "template_id": 0,
-            "data": {
-                "by": "data",
-                "person_id": person.id,
-                "name": "hey",
-                "status": "positive",
-                "created": 1,
-                "updated": 2
-            }
-        }), {
-            "person_id": person.id,
-            "name": "hey",
-            "status": "positive",
-            "created": 1,
-            "updated": 2,
-            "data": {
-                "by": "data",
-                "person_id": person.id,
-                "name": "hey",
-                "status": "positive",
-                "created": 1,
-                "updated": 2
-            }
-        })
-
-        # template by data, person by name
-
-        self.assertEqual(service.ActValue.build(**{
-            "template": {
-                "by": "template",
-                "name": "hey",
-                "person": "unit"
-            }
-        }), {
-            "name": "hey",
-            "person_id": person.id,
-            "data": {
-                "by": "template",
-                "name": "hey",
-                "person": "unit"
-            }
-        })
-
-        # template by id, person by name in template
-
-        template = self.sample.template("unit", "routine", data={
-            "by": "template_id",
-            "status": "negative"
-        })
-
-        self.assertEqual(service.ActValue.build(**{
-            "name": "hey",
-            "template_id": template.id
-        }), {
-            "name": "hey",
-            "status": "negative",
-            "data": {
-                "by": "template_id",
-                "status": "negative"
-            }
-        })
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.notify")
-    def test_notify(self, mock_notify):
-
-        model = self.sample.act("unit", "test")
-
-        service.ActValue.notify("test", model)
-
-        self.assertEqual(model.updated, 7)
-        self.assertEqual(model.data["notified"], 7)
-
-        mock_notify.assert_called_once_with({
-            "kind": "act",
-            "action": "test",
-            "act": service.model_out(model),
-            "person": service.model_out(model.person)
-        })
-
-    @unittest.mock.patch("flask.request")
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.notify")
-    def test_create(self, mock_notify, mock_request):
-
-        mock_request.session = self.session
-
-        person = self.sample.person("unit")
-
-        model = service.ActValue.create(**{
-            "person_id": person.id,
-            "name": "unit",
-            "status": "negative",
-            "created": 6,
-            "data": {
-                "text": "hey",
-                "todo": {
-                    "name": "Unit",
-                    "text": "test"
-                }
-            }
-        })
-
-        self.assertEqual(model.person_id, person.id)
-        self.assertEqual(model.name, "unit")
-        self.assertEqual(model.status, "negative")
-        self.assertEqual(model.created, 6)
-        self.assertEqual(model.updated, 7)
-        self.assertEqual(model.data, {
-            "text": "hey",
-            "notified": 7,
-            "todo": {
-                "name": "Unit",
-                "text": "test"
-            }
-        })
-
-        todo = self.session.query(mysql.ToDo).filter_by(name="Unit").all()[0]
-        flask.request.session.commit()
-        self.assertEqual(todo.data["text"], "test")
-
-        item = self.session.query(mysql.Act).get(model.id)
-        flask.request.session.commit()
-        self.assertEqual(item.name, "unit")
-
-        mock_notify.assert_has_calls([
-            unittest.mock.call({
-                "kind": "act",
-                "action": "create",
-                "act": service.model_out(model),
-                "person": service.model_out(model.person)
-            }),
-            unittest.mock.call({
-                "kind": "todo",
-                "action": "create",
-                "todo": service.model_out(todo),
-                "person": service.model_out(todo.person)
-            })
-        ])
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.Status.notify")
-    def test_wrong(self, mock_notify):
-
-        model = self.sample.act("unit", "hey")
-
-        self.assertTrue(service.ActValue.wrong(model))
-        self.assertEqual(model.status, "negative")
-        mock_notify.assert_called_once_with("wrong", model)
-
-        self.assertFalse(service.ActValue.wrong(model))
-        mock_notify.assert_called_once()
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.Status.notify")
-    def test_right(self, mock_notify):
-
-        model = self.sample.act("unit", "hey", status="negative")
-
-        self.assertTrue(service.ActValue.right(model))
-        self.assertEqual(model.status, "positive")
-        mock_notify.assert_called_once_with("right", model)
-
-        self.assertFalse(service.ActValue.right(model))
-        mock_notify.assert_called_once()
+class TestActA(TestRest):
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     @unittest.mock.patch("service.notify", unittest.mock.MagicMock)
@@ -2690,6 +2703,467 @@ class TestActValue(TestRest):
         self.assertEqual(item.status, "positive")
         self.assertStatusValue(self.api.patch(f"/act/{model.id}/right"), 202, "updated", False)
 
+class TestToDo(TestRest):
+
+    @unittest.mock.patch("flask.request")
+    def test_validate(self, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+        template = self.sample.template("test", "todo", {"a": 1})
+
+        fields = service.ToDoCL.fields()
+
+        self.assertFalse(service.ToDo.validate(fields))
+
+        self.assertFields(fields, [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "status",
+                "options": ['opened', 'closed'],
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {0: "None", template.id: "test"},
+                "style": "select",
+                "trigger": True,
+                "optional": True
+            },
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "optional": True
+            }
+        ])
+
+        self.assertEqual(fields.errors, [])
+
+        fields = service.ToDoCL.fields(values={"yaml": "a:1"})
+
+        self.assertFalse(service.ToDo.validate(fields))
+
+        self.assertEqual(fields["yaml"].errors, ["must be dict"])
+
+        fields = service.ToDoRUD.fields()
+
+        self.assertFalse(service.ToDo.validate(fields))
+
+        self.assertFields(fields, [
+            {
+                "name": "id",
+                "readonly": True
+            },
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "status",
+                "options": ['opened', 'closed'],
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "created",
+                "style": "datetime",
+                "readonly": True
+            },
+            {
+                "name": "updated",
+                "style": "datetime",
+                "readonly": True
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "optional": True
+            }
+        ])
+
+        self.assertEqual(fields.errors, [])
+
+        fields = service.ToDoRUD.fields(values={"yaml": "a:1"})
+
+        self.assertFalse(service.ToDo.validate(fields))
+
+        self.assertEqual(fields["yaml"].errors, ["must be dict"])
+
+    @unittest.mock.patch("flask.request")
+    def test_retrieve(self, mock_request):
+
+        mock_request.session = self.session
+
+        todo = self.sample.todo("unit", "test")
+
+        self.assertEqual(service.ToDo.retrieve(todo.id).name, "test")
+
+    @unittest.mock.patch("flask.request")
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    def test_build(self, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+
+        # basic 
+
+        self.assertEqual(service.ToDo.build(**{
+            "template_id": 0,
+            "data": {
+                "by": "data",
+                "person_id": person.id,
+                "name": "hey",
+                "status": "opened",
+                "created": 1,
+                "updated": 2
+            }
+        }), {
+            "person_id": person.id,
+            "name": "hey",
+            "status": "opened",
+            "created": 1,
+            "updated": 2,
+            "data": {
+                "by": "data",
+                "person_id": person.id,
+                "name": "hey",
+                "status": "opened",
+                "created": 1,
+                "updated": 2
+            }
+        })
+
+        # template by data, person by name
+
+        self.assertEqual(service.ToDo.build(**{
+            "template": {
+                "by": "template",
+                "name": "hey",
+                "person": "unit"
+            }
+        }), {
+            "name": "hey",
+            "person_id": person.id,
+            "data": {
+                "by": "template",
+                "name": "hey",
+                "person": "unit"
+            }
+        })
+
+        # template by id, person by name in template
+
+        template = self.sample.template("unit", "todo", data={
+            "by": "template_id",
+            "status": "closed"
+        })
+
+        self.assertEqual(service.ToDo.build(**{
+            "name": "hey",
+            "template_id": template.id
+        }), {
+            "name": "hey",
+            "status": "closed",
+            "data": {
+                "by": "template_id",
+                "status": "closed"
+            }
+        })
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.notify")
+    def test_notify(self, mock_notify):
+
+        model = self.sample.todo("unit", "test")
+
+        service.ToDo.notify("test", model)
+
+        self.assertEqual(model.updated, 7)
+        self.assertEqual(model.data["notified"], 7)
+
+        mock_notify.assert_called_once_with({
+            "kind": "todo",
+            "action": "test",
+            "todo": service.model_out(model),
+            "person": service.model_out(model.person)
+        })
+
+    @unittest.mock.patch("flask.request")
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.notify")
+    def test_create(self, mock_notify, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+
+        model = service.ToDo.create(**{
+            "person_id": person.id,
+            "name": "unit",
+            "created": 6,
+            "data": {
+                "text": "hey"
+            }
+        })
+
+        self.assertEqual(model.person_id, person.id)
+        self.assertEqual(model.name, "unit")
+        self.assertEqual(model.status, "opened")
+        self.assertEqual(model.created, 6)
+        self.assertEqual(model.updated, 7)
+        self.assertEqual(model.data, {
+            "text": "hey",
+            "notified": 7
+        })
+
+        item = self.session.query(mysql.ToDo).get(model.id)
+        flask.request.session.commit()
+        self.assertEqual(item.name, "unit")
+
+        mock_notify.assert_called_once_with({
+            "kind": "todo",
+            "action": "create",
+            "todo": service.model_out(model),
+            "person": service.model_out(model.person)
+        })
+
+    @unittest.mock.patch("flask.request")
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.notify")
+    def test_todos(self, mock_notify, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+
+        self.sample.todo("unit", status="closed")
+        self.sample.todo("test")
+
+        self.assertFalse(service.ToDo.todos({
+            "person": person.name
+        }))
+        mock_notify.assert_not_called()
+
+        todo = self.sample.todo("unit")
+
+        self.assertTrue(service.ToDo.todos({
+            "person": person.name
+        }))
+        item = self.session.query(mysql.ToDo).get(todo.id)
+        self.assertEqual(item.updated, 7)
+        self.assertEqual(item.data["notified"], 7)
+        mock_notify.assert_called_once_with({
+            "kind": "todos",
+            "action": "remind",
+            "person": service.model_out(person),
+            "speech": {},
+            "todos": service.models_out([todo])
+        })
+
+        self.assertTrue(service.ToDo.todos({
+            "person_id": person.id,
+            "speech": {
+                "language": "cursing"
+            }
+        }))
+        mock_notify.assert_called_with({
+            "kind": "todos",
+            "action": "remind",
+            "person": service.model_out(person),
+            "speech": {"language": "cursing"},
+            "todos": service.models_out([todo])
+        })
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.ToDo.notify")
+    def test_remind(self, mock_notify):
+
+        todo = self.sample.todo("unit", "hey", data={
+            "text": "hey"
+        })
+
+        self.assertTrue(service.ToDo.remind(todo))
+
+        mock_notify.assert_called_once_with("remind", todo)
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.ToDo.notify")
+    def test_pause(self, mock_notify):
+
+        todo = self.sample.todo("unit", "hey", data={
+            "text": "hey"
+        })
+
+        self.assertTrue(service.ToDo.pause(todo))
+        self.assertTrue(todo.data["paused"])
+        mock_notify.assert_called_once_with("pause", todo)
+
+        self.assertFalse(service.ToDo.pause(todo))
+        mock_notify.assert_called_once()
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.ToDo.notify")
+    def test_unpause(self, mock_notify):
+
+        todo = self.sample.todo("unit", "hey", data={
+            "text": "hey",
+            "paused": True
+        })
+
+        self.assertTrue(service.ToDo.unpause(todo))
+        self.assertFalse(todo.data["paused"])
+        mock_notify.assert_called_once_with("unpause", todo)
+
+        self.assertFalse(service.ToDo.unpause(todo))
+        mock_notify.assert_called_once()
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.ToDo.notify")
+    def test_skip(self, mock_notify):
+
+        todo = self.sample.todo("unit", "hey", data={
+            "text": "hey"
+        })
+
+        self.assertTrue(service.ToDo.skip(todo))
+        self.assertTrue(todo.data["skipped"])
+        self.assertEqual(todo.data["end"], 7)
+        self.assertEqual(todo.status, "closed")
+        mock_notify.assert_called_once_with("skip", todo)
+
+        self.assertFalse(service.ToDo.skip(todo))
+        mock_notify.assert_called_once()
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.ToDo.notify")
+    def test_unskip(self, mock_notify):
+
+        todo = self.sample.todo("unit", "hey", status="closed", data={
+            "text": "hey",
+            "skipped": True,
+            "end": 0
+        })
+
+        self.assertTrue(service.ToDo.unskip(todo))
+        self.assertFalse(todo.data["skipped"])
+        self.assertNotIn("end", todo.data)
+        self.assertEqual(todo.status, "opened")
+        mock_notify.assert_called_once_with("unskip", todo)
+
+        self.assertFalse(service.ToDo.unskip(todo))
+        mock_notify.assert_called_once()
+
+    @unittest.mock.patch("flask.request")
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.ToDo.notify")
+    @unittest.mock.patch("service.notify", unittest.mock.MagicMock())
+    def test_complete(self, mock_notify, mock_request):
+
+        mock_request.session = self.session
+
+        area = self.sample.area("unit", "test", status="negative")
+
+        todo = self.sample.todo("unit", "hey", data={
+            "text": "hey",
+            "area": area.id,
+            "act": {
+                "name": "Unit",
+                "text": "test"
+            }
+        })
+
+        self.assertTrue(service.ToDo.complete(todo))
+        self.assertEqual(todo.status, "closed")
+        self.assertTrue(todo.data["end"], 7)
+
+        item = self.session.query(mysql.Area).get(area.id)
+        self.assertEqual(item.status, "positive")
+        mock_notify.assert_called_once_with("complete", todo)
+
+        act = self.session.query(mysql.Act).filter_by(name="Unit").all()[0]
+        self.assertEqual(act.person.id, todo.person.id)
+        self.assertEqual(act.status, "positive")
+        self.assertEqual(act.data["text"], "test")
+
+        self.assertFalse(service.ToDo.complete(todo))
+        mock_notify.assert_called_once()
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.ToDo.notify")
+    def test_uncomplete(self, mock_notify):
+
+        todo = self.sample.todo("unit", "hey", status="closed", data={
+            "text": "hey",
+            "end": 0
+        })
+
+        self.assertTrue(service.ToDo.uncomplete(todo))
+        self.assertNotIn("end", todo.data)
+        self.assertEqual(todo.status, "opened")
+        mock_notify.assert_called_once_with("uncomplete", todo)
+
+        self.assertFalse(service.ToDo.uncomplete(todo))
+        mock_notify.assert_called_once()
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.ToDo.notify")
+    def test_expire(self, mock_notify):
+
+        todo = self.sample.todo("unit", "hey", data={
+            "text": "hey"
+        })
+
+        self.assertTrue(service.ToDo.expire(todo))
+        self.assertTrue(todo.data["expired"])
+        self.assertEqual(todo.data["end"], 7)
+        self.assertEqual(todo.status, "closed")
+        mock_notify.assert_called_once_with("expire", todo)
+
+        self.assertFalse(service.ToDo.expire(todo))
+        mock_notify.assert_called_once()
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.ToDo.notify")
+    def test_unexpire(self, mock_notify):
+
+        todo = self.sample.todo("unit", "hey", status="closed", data={
+            "text": "hey",
+            "expired": True,
+            "end": 0
+        })
+
+        self.assertTrue(service.ToDo.unexpire(todo))
+        self.assertFalse(todo.data["expired"])
+        self.assertNotIn("end", todo.data)
+        self.assertEqual(todo.status, "opened")
+        mock_notify.assert_called_once_with("unexpire", todo)
+
+        self.assertFalse(service.ToDo.unexpire(todo))
+        mock_notify.assert_called_once()
 
 class TestToDoCL(TestRest):
 
@@ -2767,61 +3241,6 @@ class TestToDoCL(TestRest):
                 "value": "a: 1\n"
             }
         ])
-
-    @unittest.mock.patch("flask.request")
-    def test_validate(self, mock_request):
-
-        mock_request.session = self.session
-
-        person = self.sample.person("unit")
-        template = self.sample.template("test", "todo", {"a": 1})
-
-        fields = service.ToDoCL.fields()
-
-        self.assertFalse(service.ToDoCL.validate(fields))
-
-        self.assertEqual(fields.to_list(), [
-            {
-                "name": "person_id",
-                "label": "person",
-                "options": [person.id],
-                "labels": {person.id: "unit"},
-                "style": "radios",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "status",
-                "options": ['opened', 'closed'],
-                "style": "radios",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "template_id",
-                "label": "template",
-                "options": [0, template.id],
-                "labels": {0: "None", template.id: "test"},
-                "style": "select",
-                "trigger": True,
-                "optional": True
-            },
-            {
-                "name": "name",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "yaml",
-                "style": "textarea",
-                "optional": True
-            }
-        ])
-
-        self.assertEqual(fields.errors, [])
-
-        fields = service.ToDoCL.fields(values={"yaml": "a:1"})
-
-        self.assertFalse(service.ToDoCL.validate(fields))
-
-        self.assertEqual(fields["yaml"].errors, ["must be dict"])
 
     def test_options(self):
 
@@ -2988,6 +3407,25 @@ class TestToDoCL(TestRest):
             }
         ])
 
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.notify", unittest.mock.MagicMock)
+    def test_patch(self):
+
+        person = self.sample.person("unit")
+
+        todo = self.sample.todo("unit", "hey", data={
+            "text": "hey"
+        })
+
+        self.assertStatusValue(self.api.patch(f"/todo", json={
+            "todos": {
+                "person": "unit"
+            }
+        }), 202, "updated", True)
+        item = self.session.query(mysql.ToDo).get(todo.id)
+        self.session.commit()
+        self.assertEqual(item.data["notified"], 7)
+
 class TestToDoRUD(TestRest):
 
     @unittest.mock.patch("flask.request")
@@ -3033,74 +3471,6 @@ class TestToDoRUD(TestRest):
                 "optional": True
             }
         ])
-
-    @unittest.mock.patch("flask.request")
-    def test_validate(self, mock_request):
-
-        mock_request.session = self.session
-
-        person = self.sample.person("unit")
-
-        fields = service.ToDoRUD.fields()
-
-        self.assertFalse(service.ToDoRUD.validate(fields))
-
-        self.assertEqual(fields.to_list(), [
-            {
-                "name": "id",
-                "readonly": True
-            },
-            {
-                "name": "person_id",
-                "label": "person",
-                "options": [person.id],
-                "labels": {person.id: "unit"},
-                "style": "radios",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "status",
-                "options": ['opened', 'closed'],
-                "style": "radios",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "name",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "created",
-                "style": "datetime",
-                "readonly": True
-            },
-            {
-                "name": "updated",
-                "style": "datetime",
-                "readonly": True
-            },
-            {
-                "name": "yaml",
-                "style": "textarea",
-                "optional": True
-            }
-        ])
-
-        self.assertEqual(fields.errors, [])
-
-        fields = service.ToDoRUD.fields(values={"yaml": "a:1"})
-
-        self.assertFalse(service.ToDoRUD.validate(fields))
-
-        self.assertEqual(fields["yaml"].errors, ["must be dict"])
-
-    @unittest.mock.patch("flask.request")
-    def test_retrieve(self, mock_request):
-
-        mock_request.session = self.session
-
-        todo = self.sample.todo("unit", "test")
-
-        self.assertEqual(service.ToDoRUD.retrieve(todo.id).name, "test")
 
     def test_options(self):
 
@@ -3307,351 +3677,7 @@ class TestToDoRUD(TestRest):
 
         self.assertStatusModels(self.api.get("/todo"), 200, "areas", [])
 
-class TestToDoAction(TestRest):
-
-    @unittest.mock.patch("flask.request")
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    def test_build(self, mock_request):
-
-        mock_request.session = self.session
-
-        person = self.sample.person("unit")
-
-        # basic 
-
-        self.assertEqual(service.ToDoAction.build(**{
-            "template_id": 0,
-            "data": {
-                "by": "data",
-                "person_id": person.id,
-                "name": "hey",
-                "status": "opened",
-                "created": 1,
-                "updated": 2
-            }
-        }), {
-            "person_id": person.id,
-            "name": "hey",
-            "status": "opened",
-            "created": 1,
-            "updated": 2,
-            "data": {
-                "by": "data",
-                "person_id": person.id,
-                "name": "hey",
-                "status": "opened",
-                "created": 1,
-                "updated": 2
-            }
-        })
-
-        # template by data, person by name
-
-        self.assertEqual(service.ToDoAction.build(**{
-            "template": {
-                "by": "template",
-                "name": "hey",
-                "person": "unit"
-            }
-        }), {
-            "name": "hey",
-            "person_id": person.id,
-            "data": {
-                "by": "template",
-                "name": "hey",
-                "person": "unit"
-            }
-        })
-
-        # template by id, person by name in template
-
-        template = self.sample.template("unit", "todo", data={
-            "by": "template_id",
-            "status": "closed"
-        })
-
-        self.assertEqual(service.ToDoAction.build(**{
-            "name": "hey",
-            "template_id": template.id
-        }), {
-            "name": "hey",
-            "status": "closed",
-            "data": {
-                "by": "template_id",
-                "status": "closed"
-            }
-        })
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.notify")
-    def test_notify(self, mock_notify):
-
-        model = self.sample.todo("unit", "test")
-
-        service.ToDoAction.notify("test", model)
-
-        self.assertEqual(model.updated, 7)
-        self.assertEqual(model.data["notified"], 7)
-
-        mock_notify.assert_called_once_with({
-            "kind": "todo",
-            "action": "test",
-            "todo": service.model_out(model),
-            "person": service.model_out(model.person)
-        })
-
-    @unittest.mock.patch("flask.request")
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.notify")
-    def test_create(self, mock_notify, mock_request):
-
-        mock_request.session = self.session
-
-        person = self.sample.person("unit")
-
-        model = service.ToDoAction.create(**{
-            "person_id": person.id,
-            "name": "unit",
-            "created": 6,
-            "data": {
-                "text": "hey"
-            }
-        })
-
-        self.assertEqual(model.person_id, person.id)
-        self.assertEqual(model.name, "unit")
-        self.assertEqual(model.status, "opened")
-        self.assertEqual(model.created, 6)
-        self.assertEqual(model.updated, 7)
-        self.assertEqual(model.data, {
-            "text": "hey",
-            "notified": 7
-        })
-
-        item = self.session.query(mysql.ToDo).get(model.id)
-        flask.request.session.commit()
-        self.assertEqual(item.name, "unit")
-
-        mock_notify.assert_called_once_with({
-            "kind": "todo",
-            "action": "create",
-            "todo": service.model_out(model),
-            "person": service.model_out(model.person)
-        })
-
-    @unittest.mock.patch("flask.request")
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.notify")
-    def test_todos(self, mock_notify, mock_request):
-
-        mock_request.session = self.session
-
-        person = self.sample.person("unit")
-
-        self.sample.todo("unit", status="closed")
-        self.sample.todo("test")
-
-        self.assertFalse(service.ToDoAction.todos({
-            "person": person.name
-        }))
-        mock_notify.assert_not_called()
-
-        todo = self.sample.todo("unit")
-
-        self.assertTrue(service.ToDoAction.todos({
-            "person": person.name
-        }))
-        item = self.session.query(mysql.ToDo).get(todo.id)
-        self.assertEqual(item.updated, 7)
-        self.assertEqual(item.data["notified"], 7)
-        mock_notify.assert_called_once_with({
-            "kind": "todos",
-            "action": "remind",
-            "person": service.model_out(person),
-            "speech": {},
-            "todos": service.models_out([todo])
-        })
-
-        self.assertTrue(service.ToDoAction.todos({
-            "person_id": person.id,
-            "speech": {
-                "language": "cursing"
-            }
-        }))
-        mock_notify.assert_called_with({
-            "kind": "todos",
-            "action": "remind",
-            "person": service.model_out(person),
-            "speech": {"language": "cursing"},
-            "todos": service.models_out([todo])
-        })
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.Action.notify")
-    def test_remind(self, mock_notify):
-
-        todo = self.sample.todo("unit", "hey", data={
-            "text": "hey"
-        })
-
-        self.assertTrue(service.ToDoAction.remind(todo))
-
-        mock_notify.assert_called_once_with("remind", todo)
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.Action.notify")
-    def test_pause(self, mock_notify):
-
-        todo = self.sample.todo("unit", "hey", data={
-            "text": "hey"
-        })
-
-        self.assertTrue(service.ToDoAction.pause(todo))
-        self.assertTrue(todo.data["paused"])
-        mock_notify.assert_called_once_with("pause", todo)
-
-        self.assertFalse(service.ToDoAction.pause(todo))
-        mock_notify.assert_called_once()
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.Action.notify")
-    def test_unpause(self, mock_notify):
-
-        todo = self.sample.todo("unit", "hey", data={
-            "text": "hey",
-            "paused": True
-        })
-
-        self.assertTrue(service.ToDoAction.unpause(todo))
-        self.assertFalse(todo.data["paused"])
-        mock_notify.assert_called_once_with("unpause", todo)
-
-        self.assertFalse(service.ToDoAction.unpause(todo))
-        mock_notify.assert_called_once()
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.Action.notify")
-    def test_skip(self, mock_notify):
-
-        todo = self.sample.todo("unit", "hey", data={
-            "text": "hey"
-        })
-
-        self.assertTrue(service.ToDoAction.skip(todo))
-        self.assertTrue(todo.data["skipped"])
-        self.assertEqual(todo.data["end"], 7)
-        self.assertEqual(todo.status, "closed")
-        mock_notify.assert_called_once_with("skip", todo)
-
-        self.assertFalse(service.ToDoAction.skip(todo))
-        mock_notify.assert_called_once()
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.Action.notify")
-    def test_unskip(self, mock_notify):
-
-        todo = self.sample.todo("unit", "hey", status="closed", data={
-            "text": "hey",
-            "skipped": True,
-            "end": 0
-        })
-
-        self.assertTrue(service.ToDoAction.unskip(todo))
-        self.assertFalse(todo.data["skipped"])
-        self.assertNotIn("end", todo.data)
-        self.assertEqual(todo.status, "opened")
-        mock_notify.assert_called_once_with("unskip", todo)
-
-        self.assertFalse(service.ToDoAction.unskip(todo))
-        mock_notify.assert_called_once()
-
-    @unittest.mock.patch("flask.request")
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.Action.notify")
-    @unittest.mock.patch("service.notify", unittest.mock.MagicMock())
-    def test_complete(self, mock_notify, mock_request):
-
-        mock_request.session = self.session
-
-        area = self.sample.area("unit", "test", status="negative")
-
-        todo = self.sample.todo("unit", "hey", data={
-            "text": "hey",
-            "area": area.id,
-            "act": {
-                "name": "Unit",
-                "text": "test"
-            }
-        })
-
-        self.assertTrue(service.ToDoAction.complete(todo))
-        self.assertEqual(todo.status, "closed")
-        self.assertTrue(todo.data["end"], 7)
-
-        item = self.session.query(mysql.Area).get(area.id)
-        self.assertEqual(item.status, "positive")
-        mock_notify.assert_called_once_with("complete", todo)
-
-        act = self.session.query(mysql.Act).filter_by(name="Unit").all()[0]
-        self.assertEqual(act.person.id, todo.person.id)
-        self.assertEqual(act.status, "positive")
-        self.assertEqual(act.data["text"], "test")
-
-        self.assertFalse(service.ToDoAction.complete(todo))
-        mock_notify.assert_called_once()
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.Action.notify")
-    def test_uncomplete(self, mock_notify):
-
-        todo = self.sample.todo("unit", "hey", status="closed", data={
-            "text": "hey",
-            "end": 0
-        })
-
-        self.assertTrue(service.ToDoAction.uncomplete(todo))
-        self.assertNotIn("end", todo.data)
-        self.assertEqual(todo.status, "opened")
-        mock_notify.assert_called_once_with("uncomplete", todo)
-
-        self.assertFalse(service.ToDoAction.uncomplete(todo))
-        mock_notify.assert_called_once()
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.Action.notify")
-    def test_expire(self, mock_notify):
-
-        todo = self.sample.todo("unit", "hey", data={
-            "text": "hey"
-        })
-
-        self.assertTrue(service.ToDoAction.expire(todo))
-        self.assertTrue(todo.data["expired"])
-        self.assertEqual(todo.data["end"], 7)
-        self.assertEqual(todo.status, "closed")
-        mock_notify.assert_called_once_with("expire", todo)
-
-        self.assertFalse(service.ToDoAction.expire(todo))
-        mock_notify.assert_called_once()
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.Action.notify")
-    def test_unexpire(self, mock_notify):
-
-        todo = self.sample.todo("unit", "hey", status="closed", data={
-            "text": "hey",
-            "expired": True,
-            "end": 0
-        })
-
-        self.assertTrue(service.ToDoAction.unexpire(todo))
-        self.assertFalse(todo.data["expired"])
-        self.assertNotIn("end", todo.data)
-        self.assertEqual(todo.status, "opened")
-        mock_notify.assert_called_once_with("unexpire", todo)
-
-        self.assertFalse(service.ToDoAction.unexpire(todo))
-        mock_notify.assert_called_once()
+class TestToDoA(TestRest):
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     @unittest.mock.patch("service.notify", unittest.mock.MagicMock)
@@ -3662,17 +3688,6 @@ class TestToDoAction(TestRest):
         todo = self.sample.todo("unit", "hey", data={
             "text": "hey"
         })
-
-        # todos
-
-        self.assertStatusValue(self.api.patch(f"/todo", json={
-            "todos": {
-                "person": "unit"
-            }
-        }), 202, "updated", True)
-        item = self.session.query(mysql.ToDo).get(todo.id)
-        self.session.commit()
-        self.assertEqual(item.data["notified"], 7)
 
         # remind
 
@@ -3745,6 +3760,503 @@ class TestToDoAction(TestRest):
         self.assertFalse(item.data["expired"])
         self.assertStatusValue(self.api.patch(f"/todo/{todo.id}/unexpire"), 202, "updated", False)
 
+class TestRoutine(TestRest):
+
+    @unittest.mock.patch("flask.request")
+    def test_validate(self, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+        template = self.sample.template("test", "routine", {"a": 1})
+
+        fields = service.RoutineCL.fields()
+
+        self.assertFalse(service.Routine.validate(fields))
+
+        self.assertFields(fields, [
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "status",
+                "options": ['opened', 'closed'],
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "template_id",
+                "label": "template",
+                "options": [0, template.id],
+                "labels": {0: "None", template.id: "test"},
+                "style": "select",
+                "trigger": True,
+                "optional": True
+            },
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "optional": True
+            }
+        ])
+
+        self.assertEqual(fields.errors, [])
+
+        fields = service.RoutineCL.fields(values={"yaml": "a:1"})
+
+        self.assertFalse(service.Routine.validate(fields))
+
+        self.assertEqual(fields["yaml"].errors, ["must be dict"])
+
+        fields = service.RoutineRUD.fields()
+
+        self.assertFalse(service.Routine.validate(fields))
+
+        self.assertFields(fields, [
+            {
+                "name": "id",
+                "readonly": True
+            },
+            {
+                "name": "person_id",
+                "label": "person",
+                "options": [person.id],
+                "labels": {person.id: "unit"},
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "status",
+                "options": ['opened', 'closed'],
+                "style": "radios",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "name",
+                "errors": ["missing value"]
+            },
+            {
+                "name": "created",
+                "style": "datetime",
+                "readonly": True
+            },
+            {
+                "name": "updated",
+                "style": "datetime",
+                "readonly": True
+            },
+            {
+                "name": "yaml",
+                "style": "textarea",
+                "optional": True
+            }
+        ])
+
+        self.assertEqual(fields.errors, [])
+
+        fields = service.RoutineRUD.fields(values={"yaml": "a:1"})
+
+        self.assertFalse(service.Routine.validate(fields))
+
+        self.assertEqual(fields["yaml"].errors, ["must be dict"])
+
+    @unittest.mock.patch("flask.request")
+    def test_retrieve(self, mock_request):
+
+        mock_request.session = self.session
+
+        routine = self.sample.routine("test", "unit")
+
+        self.assertEqual(service.Routine.retrieve(routine.id).name, "unit")
+
+    @unittest.mock.patch("flask.request")
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    def test_build(self, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+
+        todo = self.sample.todo("unit")
+        self.sample.todo("unit", status="closed")
+        self.sample.todo("test")
+
+        # explicit 
+
+        self.assertEqual(service.Routine.build(**{
+            "template_id": 0,
+            "data": {
+                "by": "data",
+                "person_id": person.id,
+                "name": "hey",
+                "status": "opened",
+                "created": 1,
+                "updated": 2,
+                "todos": True,
+                "tasks": [{}]
+            }
+        }), {
+            "person_id": person.id,
+            "name": "hey",
+            "status": "opened",
+            "created": 1,
+            "updated": 2,
+            "data": {
+                "by": "data",
+                "person_id": person.id,
+                "name": "hey",
+                "status": "opened",
+                "created": 1,
+                "updated": 2,
+                "todos": True,
+                "tasks": [
+                    {
+                        "id": 0,
+                        "text": "todo it",
+                        "todo": todo.id
+
+                    },
+                    {
+                        "id": 1
+                    }
+                ]
+            }
+        })
+
+        # template by data, person by name
+
+        self.assertEqual(service.Routine.build(**{
+            "template": {
+                "by": "template",
+                "name": "hey",
+                "person": "unit"
+            }
+        }), {
+            "name": "hey",
+            "person_id": person.id,
+            "data": {
+                "by": "template",
+                "name": "hey",
+                "person": "unit"
+            }
+        })
+
+        # template by id, person by name in template
+
+        template = self.sample.template("unit", "routine", data={
+            "by": "template_id",
+            "status": "closed"
+        })
+
+        self.assertEqual(service.Routine.build(**{
+            "name": "hey",
+            "template_id": template.id
+        }), {
+            "name": "hey",
+            "status": "closed",
+            "data": {
+                "by": "template_id",
+                "status": "closed"
+            }
+        })
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.notify")
+    def test_notify(self, mock_notify):
+
+        model = self.sample.routine("unit", "test")
+
+        service.Routine.notify("test", model)
+
+        self.assertEqual(model.updated, 7)
+        self.assertEqual(model.data["notified"], 7)
+
+        mock_notify.assert_called_once_with({
+            "kind": "routine",
+            "action": "test",
+            "routine": service.model_out(model),
+            "person": service.model_out(model.person)
+        })
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.notify")
+    def test_check(self, mock_notify):
+
+        routine = self.sample.routine("unit", "hey", data={
+            "text": "hey"
+        })
+
+        service.Routine.check(routine)
+
+        mock_notify.assert_not_called()
+
+        routine.data["tasks"] = [
+            {
+                "text": "do it"
+            },
+            {
+                "text": "moo it",
+                "paused": True
+            }
+        ]
+
+        service.Routine.check(routine)
+
+        self.assertEqual(routine.data["tasks"][0]["start"], 7)
+
+        mock_notify.assert_called_once_with({
+            "kind": "task",
+            "action": "start",
+            "task": routine.data["tasks"][0],
+            "routine": service.model_out(routine),
+            "person": service.model_out(routine.person)
+        })
+
+        service.Routine.check(routine)
+
+        mock_notify.assert_called_once_with({
+            "kind": "task",
+            "action": "start",
+            "task": routine.data["tasks"][0],
+            "routine": service.model_out(routine),
+            "person": service.model_out(routine.person)
+        })
+
+        routine.data["tasks"][0]["end"] = 0
+
+        service.Routine.check(routine)
+
+        self.assertEqual(routine.data["tasks"][0]["start"], 7)
+
+        mock_notify.assert_called_with({
+            "kind": "task",
+            "action": "pause",
+            "task": routine.data["tasks"][1],
+            "routine": service.model_out(routine),
+            "person": service.model_out(routine.person)
+        })
+
+        routine.data["tasks"][1]["end"] = 0
+
+        service.Routine.check(routine)
+
+        self.assertEqual(routine.status, "closed")
+
+    @unittest.mock.patch("flask.request")
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.notify", unittest.mock.MagicMock)
+    def test_create(self, mock_request):
+
+        mock_request.session = self.session
+
+        person = self.sample.person("unit")
+
+        routine = service.Routine.create(**{
+            "person_id": person.id,
+            "name": "unit",
+            "status": "opened",
+            "created": 6,
+            "data": {
+                "text": "hey",
+                "tasks": [{}]
+            }
+        })
+
+        self.assertEqual(routine.person_id, person.id)
+        self.assertEqual(routine.name, "unit")
+        self.assertEqual(routine.status, "opened")
+        self.assertEqual(routine.created, 6)
+        self.assertEqual(routine.updated, 7)
+        self.assertEqual(routine.data, {
+            "text": "hey",
+            "start": 7,
+            "notified": 7,
+            "notified": 7,
+                "tasks": [{
+                    "id": 0,
+                    "start": 7,
+                    "notified": 7
+                }]
+        })
+
+        item = self.session.query(mysql.Routine).get(routine.id)
+        flask.request.session.commit()
+        self.assertEqual(item.name, "unit")
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.notify", unittest.mock.MagicMock)
+    def test_next(self):
+
+        routine = self.sample.routine("unit", "hey", data={
+            "text": "hey",
+            "tasks": [{
+                "text": "do it",
+                "start": 0
+            }]
+        })
+
+        self.assertTrue(service.Routine.next(routine))
+
+        self.assertEqual(routine.data["tasks"][0]["end"], 7)
+
+        self.assertFalse(service.Routine.next(routine))
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.Routine.notify")
+    def test_remind(self, mock_notify):
+
+        routine = self.sample.routine("unit", "hey", data={
+            "text": "hey"
+        })
+
+        self.assertTrue(service.Routine.remind(routine))
+
+        mock_notify.assert_called_once_with("remind", routine)
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.Routine.notify")
+    def test_pause(self, mock_notify):
+
+        routine = self.sample.routine("unit", "hey", data={
+            "text": "hey"
+        })
+
+        self.assertTrue(service.Routine.pause(routine))
+        self.assertTrue(routine.data["paused"])
+        mock_notify.assert_called_once_with("pause", routine)
+
+        self.assertFalse(service.Routine.pause(routine))
+        mock_notify.assert_called_once()
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.Routine.notify")
+    def test_unpause(self, mock_notify):
+
+        routine = self.sample.routine("unit", "hey", data={
+            "text": "hey",
+            "paused": True
+        })
+
+        self.assertTrue(service.Routine.unpause(routine))
+        self.assertFalse(routine.data["paused"])
+        mock_notify.assert_called_once_with("unpause", routine)
+
+        self.assertFalse(service.Routine.unpause(routine))
+        mock_notify.assert_called_once()
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.Routine.notify")
+    def test_skip(self, mock_notify):
+
+        routine = self.sample.routine("unit", "hey", data={
+            "text": "hey"
+        })
+
+        self.assertTrue(service.Routine.skip(routine))
+        self.assertTrue(routine.data["skipped"])
+        self.assertEqual(routine.data["end"], 7)
+        self.assertEqual(routine.status, "closed")
+        mock_notify.assert_called_once_with("skip", routine)
+
+        self.assertFalse(service.Routine.skip(routine))
+        mock_notify.assert_called_once()
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.Routine.notify")
+    def test_unskip(self, mock_notify):
+
+        routine = self.sample.routine("unit", "hey", status="closed", data={
+            "text": "hey",
+            "skipped": True,
+            "end": 0
+        })
+
+        self.assertTrue(service.Routine.unskip(routine))
+        self.assertFalse(routine.data["skipped"])
+        self.assertNotIn("end", routine.data)
+        self.assertEqual(routine.status, "opened")
+        mock_notify.assert_called_once_with("unskip", routine)
+
+        self.assertFalse(service.Routine.unskip(routine))
+        mock_notify.assert_called_once()
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.Routine.notify")
+    def test_complete(self, mock_notify):
+
+        routine = self.sample.routine("unit", "hey", data={
+            "text": "hey"
+        })
+
+        self.assertTrue(service.Routine.complete(routine))
+        self.assertEqual(routine.status, "closed")
+        self.assertTrue(routine.data["end"], 7)
+        mock_notify.assert_called_once_with("complete", routine)
+
+        self.assertFalse(service.Routine.complete(routine))
+        mock_notify.assert_called_once()
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.Routine.notify")
+    def test_uncomplete(self, mock_notify):
+
+        routine = self.sample.routine("unit", "hey", status="closed", data={
+            "text": "hey",
+            "end": 0
+        })
+
+        self.assertTrue(service.Routine.uncomplete(routine))
+        self.assertNotIn("end", routine.data)
+        self.assertEqual(routine.status, "opened")
+        mock_notify.assert_called_once_with("uncomplete", routine)
+
+        self.assertFalse(service.Routine.uncomplete(routine))
+        mock_notify.assert_called_once()
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.Routine.notify")
+    def test_expire(self, mock_notify):
+
+        routine = self.sample.routine("unit", "hey", data={
+            "text": "hey"
+        })
+
+        self.assertTrue(service.Routine.expire(routine))
+        self.assertTrue(routine.data["expired"])
+        self.assertEqual(routine.data["end"], 7)
+        self.assertEqual(routine.status, "closed")
+        mock_notify.assert_called_once_with("expire", routine)
+
+        self.assertFalse(service.Routine.expire(routine))
+        mock_notify.assert_called_once()
+
+    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
+    @unittest.mock.patch("service.Routine.notify")
+    def test_unexpire(self, mock_notify):
+
+        routine = self.sample.routine("unit", "hey", status="closed", data={
+            "text": "hey",
+            "expired": True,
+            "end": 0
+        })
+
+        self.assertTrue(service.Routine.unexpire(routine))
+        self.assertFalse(routine.data["expired"])
+        self.assertNotIn("end", routine.data)
+        self.assertEqual(routine.status, "opened")
+        mock_notify.assert_called_once_with("unexpire", routine)
+
+        self.assertFalse(service.Routine.unexpire(routine))
+        mock_notify.assert_called_once()
 
 class TestRoutineCL(TestRest):
 
@@ -3822,61 +4334,6 @@ class TestRoutineCL(TestRest):
                 "optional": True
             }
         ])
-
-    @unittest.mock.patch("flask.request")
-    def test_validate(self, mock_request):
-
-        mock_request.session = self.session
-
-        person = self.sample.person("unit")
-        template = self.sample.template("test", "routine", {"a": 1})
-
-        fields = service.RoutineCL.fields()
-
-        self.assertFalse(service.RoutineCL.validate(fields))
-
-        self.assertEqual(fields.to_list(), [
-            {
-                "name": "person_id",
-                "label": "person",
-                "options": [person.id],
-                "labels": {person.id: "unit"},
-                "style": "radios",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "status",
-                "options": ['opened', 'closed'],
-                "style": "radios",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "template_id",
-                "label": "template",
-                "options": [0, template.id],
-                "labels": {0: "None", template.id: "test"},
-                "style": "select",
-                "trigger": True,
-                "optional": True
-            },
-            {
-                "name": "name",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "yaml",
-                "style": "textarea",
-                "optional": True
-            }
-        ])
-
-        self.assertEqual(fields.errors, [])
-
-        fields = service.RoutineCL.fields(values={"yaml": "a:1"})
-
-        self.assertFalse(service.RoutineCL.validate(fields))
-
-        self.assertEqual(fields["yaml"].errors, ["must be dict"])
 
     def test_options(self):
 
@@ -4101,74 +4558,6 @@ class TestRoutineRUD(TestRest):
             }
         ])
 
-    @unittest.mock.patch("flask.request")
-    def test_validate(self, mock_request):
-
-        mock_request.session = self.session
-
-        person = self.sample.person("unit")
-
-        fields = service.RoutineRUD.fields()
-
-        self.assertFalse(service.RoutineRUD.validate(fields))
-
-        self.assertEqual(fields.to_list(), [
-            {
-                "name": "id",
-                "readonly": True
-            },
-            {
-                "name": "person_id",
-                "label": "person",
-                "options": [person.id],
-                "labels": {person.id: "unit"},
-                "style": "radios",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "status",
-                "options": ['opened', 'closed'],
-                "style": "radios",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "name",
-                "errors": ["missing value"]
-            },
-            {
-                "name": "created",
-                "style": "datetime",
-                "readonly": True
-            },
-            {
-                "name": "updated",
-                "style": "datetime",
-                "readonly": True
-            },
-            {
-                "name": "yaml",
-                "style": "textarea",
-                "optional": True
-            }
-        ])
-
-        self.assertEqual(fields.errors, [])
-
-        fields = service.RoutineRUD.fields(values={"yaml": "a:1"})
-
-        self.assertFalse(service.RoutineRUD.validate(fields))
-
-        self.assertEqual(fields["yaml"].errors, ["must be dict"])
-
-    @unittest.mock.patch("flask.request")
-    def test_retrieve(self, mock_request):
-
-        mock_request.session = self.session
-
-        routine = self.sample.routine("test", "unit")
-
-        self.assertEqual(service.RoutineRUD.retrieve(routine.id).name, "unit")
-
     def test_options(self):
 
         unit = self.sample.person("unit")
@@ -4380,387 +4769,7 @@ class TestRoutineRUD(TestRest):
 
         self.assertStatusModels(self.api.get("/routine"), 200, "routines", [])
 
-class TestRoutineAction(TestRest):
-
-    @unittest.mock.patch("flask.request")
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    def test_build(self, mock_request):
-
-        mock_request.session = self.session
-
-        person = self.sample.person("unit")
-
-        todo = self.sample.todo("unit")
-        self.sample.todo("unit", status="closed")
-        self.sample.todo("test")
-
-        # explicit 
-
-        self.assertEqual(service.RoutineAction.build(**{
-            "template_id": 0,
-            "data": {
-                "by": "data",
-                "person_id": person.id,
-                "name": "hey",
-                "status": "opened",
-                "created": 1,
-                "updated": 2,
-                "todos": True,
-                "tasks": [{}]
-            }
-        }), {
-            "person_id": person.id,
-            "name": "hey",
-            "status": "opened",
-            "created": 1,
-            "updated": 2,
-            "data": {
-                "by": "data",
-                "person_id": person.id,
-                "name": "hey",
-                "status": "opened",
-                "created": 1,
-                "updated": 2,
-                "todos": True,
-                "tasks": [
-                    {
-                        "id": 0,
-                        "text": "todo it",
-                        "todo": todo.id
-
-                    },
-                    {
-                        "id": 1
-                    }
-                ]
-            }
-        })
-
-        # template by data, person by name
-
-        self.assertEqual(service.RoutineAction.build(**{
-            "template": {
-                "by": "template",
-                "name": "hey",
-                "person": "unit"
-            }
-        }), {
-            "name": "hey",
-            "person_id": person.id,
-            "data": {
-                "by": "template",
-                "name": "hey",
-                "person": "unit"
-            }
-        })
-
-        # template by id, person by name in template
-
-        template = self.sample.template("unit", "routine", data={
-            "by": "template_id",
-            "status": "closed"
-        })
-
-        self.assertEqual(service.RoutineAction.build(**{
-            "name": "hey",
-            "template_id": template.id
-        }), {
-            "name": "hey",
-            "status": "closed",
-            "data": {
-                "by": "template_id",
-                "status": "closed"
-            }
-        })
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.notify")
-    def test_notify(self, mock_notify):
-
-        model = self.sample.routine("unit", "test")
-
-        service.RoutineAction.notify("test", model)
-
-        self.assertEqual(model.updated, 7)
-        self.assertEqual(model.data["notified"], 7)
-
-        mock_notify.assert_called_once_with({
-            "kind": "routine",
-            "action": "test",
-            "routine": service.model_out(model),
-            "person": service.model_out(model.person)
-        })
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.notify")
-    def test_check(self, mock_notify):
-
-        routine = self.sample.routine("unit", "hey", data={
-            "text": "hey"
-        })
-
-        service.RoutineAction.check(routine)
-
-        mock_notify.assert_not_called()
-
-        routine.data["tasks"] = [
-            {
-                "text": "do it"
-            },
-            {
-                "text": "moo it",
-                "paused": True
-            }
-        ]
-
-        service.RoutineAction.check(routine)
-
-        self.assertEqual(routine.data["tasks"][0]["start"], 7)
-
-        mock_notify.assert_called_once_with({
-            "kind": "task",
-            "action": "start",
-            "task": routine.data["tasks"][0],
-            "routine": service.model_out(routine),
-            "person": service.model_out(routine.person)
-        })
-
-        service.RoutineAction.check(routine)
-
-        mock_notify.assert_called_once_with({
-            "kind": "task",
-            "action": "start",
-            "task": routine.data["tasks"][0],
-            "routine": service.model_out(routine),
-            "person": service.model_out(routine.person)
-        })
-
-        routine.data["tasks"][0]["end"] = 0
-
-        service.RoutineAction.check(routine)
-
-        self.assertEqual(routine.data["tasks"][0]["start"], 7)
-
-        mock_notify.assert_called_with({
-            "kind": "task",
-            "action": "pause",
-            "task": routine.data["tasks"][1],
-            "routine": service.model_out(routine),
-            "person": service.model_out(routine.person)
-        })
-
-        routine.data["tasks"][1]["end"] = 0
-
-        service.RoutineAction.check(routine)
-
-        self.assertEqual(routine.status, "closed")
-
-    @unittest.mock.patch("flask.request")
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.notify", unittest.mock.MagicMock)
-    def test_create(self, mock_request):
-
-        mock_request.session = self.session
-
-        person = self.sample.person("unit")
-
-        routine = service.RoutineAction.create(**{
-            "person_id": person.id,
-            "name": "unit",
-            "status": "opened",
-            "created": 6,
-            "data": {
-                "text": "hey",
-                "tasks": [{}]
-            }
-        })
-
-        self.assertEqual(routine.person_id, person.id)
-        self.assertEqual(routine.name, "unit")
-        self.assertEqual(routine.status, "opened")
-        self.assertEqual(routine.created, 6)
-        self.assertEqual(routine.updated, 7)
-        self.assertEqual(routine.data, {
-            "text": "hey",
-            "start": 7,
-            "notified": 7,
-            "notified": 7,
-                "tasks": [{
-                    "id": 0,
-                    "start": 7,
-                    "notified": 7
-                }]
-        })
-
-        item = self.session.query(mysql.Routine).get(routine.id)
-        flask.request.session.commit()
-        self.assertEqual(item.name, "unit")
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.notify", unittest.mock.MagicMock)
-    def test_next(self):
-
-        routine = self.sample.routine("unit", "hey", data={
-            "text": "hey",
-            "tasks": [{
-                "text": "do it",
-                "start": 0
-            }]
-        })
-
-        self.assertTrue(service.RoutineAction.next(routine))
-
-        self.assertEqual(routine.data["tasks"][0]["end"], 7)
-
-        self.assertFalse(service.RoutineAction.next(routine))
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.RoutineAction.notify")
-    def test_remind(self, mock_notify):
-
-        routine = self.sample.routine("unit", "hey", data={
-            "text": "hey"
-        })
-
-        self.assertTrue(service.RoutineAction.remind(routine))
-
-        mock_notify.assert_called_once_with("remind", routine)
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.RoutineAction.notify")
-    def test_pause(self, mock_notify):
-
-        routine = self.sample.routine("unit", "hey", data={
-            "text": "hey"
-        })
-
-        self.assertTrue(service.RoutineAction.pause(routine))
-        self.assertTrue(routine.data["paused"])
-        mock_notify.assert_called_once_with("pause", routine)
-
-        self.assertFalse(service.RoutineAction.pause(routine))
-        mock_notify.assert_called_once()
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.RoutineAction.notify")
-    def test_unpause(self, mock_notify):
-
-        routine = self.sample.routine("unit", "hey", data={
-            "text": "hey",
-            "paused": True
-        })
-
-        self.assertTrue(service.RoutineAction.unpause(routine))
-        self.assertFalse(routine.data["paused"])
-        mock_notify.assert_called_once_with("unpause", routine)
-
-        self.assertFalse(service.RoutineAction.unpause(routine))
-        mock_notify.assert_called_once()
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.RoutineAction.notify")
-    def test_skip(self, mock_notify):
-
-        routine = self.sample.routine("unit", "hey", data={
-            "text": "hey"
-        })
-
-        self.assertTrue(service.RoutineAction.skip(routine))
-        self.assertTrue(routine.data["skipped"])
-        self.assertEqual(routine.data["end"], 7)
-        self.assertEqual(routine.status, "closed")
-        mock_notify.assert_called_once_with("skip", routine)
-
-        self.assertFalse(service.RoutineAction.skip(routine))
-        mock_notify.assert_called_once()
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.RoutineAction.notify")
-    def test_unskip(self, mock_notify):
-
-        routine = self.sample.routine("unit", "hey", status="closed", data={
-            "text": "hey",
-            "skipped": True,
-            "end": 0
-        })
-
-        self.assertTrue(service.RoutineAction.unskip(routine))
-        self.assertFalse(routine.data["skipped"])
-        self.assertNotIn("end", routine.data)
-        self.assertEqual(routine.status, "opened")
-        mock_notify.assert_called_once_with("unskip", routine)
-
-        self.assertFalse(service.RoutineAction.unskip(routine))
-        mock_notify.assert_called_once()
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.RoutineAction.notify")
-    def test_complete(self, mock_notify):
-
-        routine = self.sample.routine("unit", "hey", data={
-            "text": "hey"
-        })
-
-        self.assertTrue(service.RoutineAction.complete(routine))
-        self.assertEqual(routine.status, "closed")
-        self.assertTrue(routine.data["end"], 7)
-        mock_notify.assert_called_once_with("complete", routine)
-
-        self.assertFalse(service.RoutineAction.complete(routine))
-        mock_notify.assert_called_once()
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.RoutineAction.notify")
-    def test_uncomplete(self, mock_notify):
-
-        routine = self.sample.routine("unit", "hey", status="closed", data={
-            "text": "hey",
-            "end": 0
-        })
-
-        self.assertTrue(service.RoutineAction.uncomplete(routine))
-        self.assertNotIn("end", routine.data)
-        self.assertEqual(routine.status, "opened")
-        mock_notify.assert_called_once_with("uncomplete", routine)
-
-        self.assertFalse(service.RoutineAction.uncomplete(routine))
-        mock_notify.assert_called_once()
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.RoutineAction.notify")
-    def test_expire(self, mock_notify):
-
-        routine = self.sample.routine("unit", "hey", data={
-            "text": "hey"
-        })
-
-        self.assertTrue(service.RoutineAction.expire(routine))
-        self.assertTrue(routine.data["expired"])
-        self.assertEqual(routine.data["end"], 7)
-        self.assertEqual(routine.status, "closed")
-        mock_notify.assert_called_once_with("expire", routine)
-
-        self.assertFalse(service.RoutineAction.expire(routine))
-        mock_notify.assert_called_once()
-
-    @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.RoutineAction.notify")
-    def test_unexpire(self, mock_notify):
-
-        routine = self.sample.routine("unit", "hey", status="closed", data={
-            "text": "hey",
-            "expired": True,
-            "end": 0
-        })
-
-        self.assertTrue(service.RoutineAction.unexpire(routine))
-        self.assertFalse(routine.data["expired"])
-        self.assertNotIn("end", routine.data)
-        self.assertEqual(routine.status, "opened")
-        mock_notify.assert_called_once_with("unexpire", routine)
-
-        self.assertFalse(service.RoutineAction.unexpire(routine))
-        mock_notify.assert_called_once()
+class TestRoutineA(TestRest):
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     @unittest.mock.patch("service.notify", unittest.mock.MagicMock)
@@ -4859,7 +4868,7 @@ class TestRoutineAction(TestRest):
         self.assertStatusValue(self.api.patch(f"/routine/{routine.id}/unexpire"), 202, "updated", False)
 
 
-class TestTaskAction(TestRest):
+class TestTask(TestRest):
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     @unittest.mock.patch("service.notify")
@@ -4873,7 +4882,7 @@ class TestTaskAction(TestRest):
             }]
         })
 
-        service.TaskAction.notify("test", routine.data["tasks"][0], routine)
+        service.Task.notify("test", routine.data["tasks"][0], routine)
 
         self.assertEqual(routine.updated, 7)
         self.assertEqual(routine.data["notified"], 7)
@@ -4888,7 +4897,7 @@ class TestTaskAction(TestRest):
         })
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.TaskAction.notify")
+    @unittest.mock.patch("service.Task.notify")
     def test_remind(self, mock_notify):
 
         routine = self.sample.routine("unit", "hey", data={
@@ -4899,11 +4908,11 @@ class TestTaskAction(TestRest):
             }]
         })
 
-        self.assertTrue(service.TaskAction.remind(routine.data["tasks"][0], routine))
+        self.assertTrue(service.Task.remind(routine.data["tasks"][0], routine))
         mock_notify.assert_called_once_with("remind", routine.data["tasks"][0], routine)
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.TaskAction.notify")
+    @unittest.mock.patch("service.Task.notify")
     def test_pause(self, mock_notify):
 
         routine = self.sample.routine("unit", "hey", data={
@@ -4914,15 +4923,15 @@ class TestTaskAction(TestRest):
             }]
         })
 
-        self.assertTrue(service.TaskAction.pause(routine.data["tasks"][0], routine))
+        self.assertTrue(service.Task.pause(routine.data["tasks"][0], routine))
         self.assertTrue(routine.data["tasks"][0]["paused"])
         mock_notify.assert_called_once_with("pause", routine.data["tasks"][0], routine)
 
-        self.assertFalse(service.TaskAction.pause(routine.data["tasks"][0], routine))
+        self.assertFalse(service.Task.pause(routine.data["tasks"][0], routine))
         mock_notify.assert_called_once()
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.TaskAction.notify")
+    @unittest.mock.patch("service.Task.notify")
     def test_unpause(self, mock_notify):
 
         routine = self.sample.routine("unit", "hey", data={
@@ -4934,16 +4943,16 @@ class TestTaskAction(TestRest):
             }]
         })
 
-        self.assertTrue(service.TaskAction.unpause(routine.data["tasks"][0], routine))
+        self.assertTrue(service.Task.unpause(routine.data["tasks"][0], routine))
         self.assertFalse(routine.data["tasks"][0]["paused"])
         mock_notify.assert_called_once_with("unpause", routine.data["tasks"][0], routine)
 
-        self.assertFalse(service.TaskAction.unpause(routine.data["tasks"][0], routine))
+        self.assertFalse(service.Task.unpause(routine.data["tasks"][0], routine))
         mock_notify.assert_called_once()
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.TaskAction.notify")
-    @unittest.mock.patch("service.RoutineAction.notify")
+    @unittest.mock.patch("service.Task.notify")
+    @unittest.mock.patch("service.Routine.notify")
     def test_skip(self, mock_routine_notify, mock_task_notify):
 
         routine = self.sample.routine("unit", "hey", data={
@@ -4954,7 +4963,7 @@ class TestTaskAction(TestRest):
             }]
         })
 
-        self.assertTrue(service.TaskAction.skip(routine.data["tasks"][0], routine))
+        self.assertTrue(service.Task.skip(routine.data["tasks"][0], routine))
         self.assertTrue(routine.data["tasks"][0]["skipped"])
         self.assertEqual(routine.data["tasks"][0]["start"], 7)
         self.assertEqual(routine.data["tasks"][0]["end"], 7)
@@ -4962,13 +4971,13 @@ class TestTaskAction(TestRest):
         mock_task_notify.assert_called_once_with("skip", routine.data["tasks"][0], routine)
         mock_routine_notify.assert_called_once_with("complete", routine)
 
-        self.assertFalse(service.TaskAction.skip(routine.data["tasks"][0], routine))
+        self.assertFalse(service.Task.skip(routine.data["tasks"][0], routine))
         mock_task_notify.assert_called_once()
         mock_routine_notify.assert_called_once()
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.TaskAction.notify")
-    @unittest.mock.patch("service.RoutineAction.notify")
+    @unittest.mock.patch("service.Task.notify")
+    @unittest.mock.patch("service.Routine.notify")
     def test_unskip(self, mock_routine_notify, mock_task_notify):
 
         routine = self.sample.routine("unit", "hey", status="closed", data={
@@ -4982,23 +4991,23 @@ class TestTaskAction(TestRest):
             }]
         })
 
-        self.assertTrue(service.TaskAction.unskip(routine.data["tasks"][0], routine))
+        self.assertTrue(service.Task.unskip(routine.data["tasks"][0], routine))
         self.assertFalse(routine.data["tasks"][0]["skipped"])
         self.assertNotIn("end", routine.data["tasks"][0])
         self.assertEqual(routine.status, "opened")
         mock_task_notify.assert_called_once_with("unskip", routine.data["tasks"][0], routine)
         mock_routine_notify.assert_called_once_with("uncomplete", routine)
 
-        self.assertFalse(service.TaskAction.unskip(routine.data["tasks"][0], routine))
+        self.assertFalse(service.Task.unskip(routine.data["tasks"][0], routine))
         mock_task_notify.assert_called_once()
         mock_routine_notify.assert_called_once()
 
 
     @unittest.mock.patch("flask.request")
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.TaskAction.notify")
-    @unittest.mock.patch("service.RoutineAction.notify")
-    @unittest.mock.patch("service.ToDoAction.notify", unittest.mock.MagicMock())
+    @unittest.mock.patch("service.Task.notify")
+    @unittest.mock.patch("service.Routine.notify")
+    @unittest.mock.patch("service.ToDo.notify", unittest.mock.MagicMock())
     def test_complete(self, mock_routine_notify, mock_task_notify, mock_request):
 
         mock_request.session = self.session
@@ -5014,7 +5023,7 @@ class TestTaskAction(TestRest):
             }]
         })
 
-        self.assertTrue(service.TaskAction.complete(routine.data["tasks"][0], routine))
+        self.assertTrue(service.Task.complete(routine.data["tasks"][0], routine))
         self.assertTrue(routine.data["tasks"][0]["end"], 7)
         self.assertEqual(routine.status, "closed")
         item = self.session.query(mysql.ToDo).get(todo.id)
@@ -5022,15 +5031,15 @@ class TestTaskAction(TestRest):
         mock_task_notify.assert_called_once_with("complete", routine.data["tasks"][0], routine)
         mock_routine_notify.assert_called_once_with("complete", routine)
 
-        self.assertFalse(service.TaskAction.complete(routine.data["tasks"][0], routine))
+        self.assertFalse(service.Task.complete(routine.data["tasks"][0], routine))
         mock_task_notify.assert_called_once()
         mock_routine_notify.assert_called_once()
     
     @unittest.mock.patch("flask.request")
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
-    @unittest.mock.patch("service.TaskAction.notify")
-    @unittest.mock.patch("service.RoutineAction.notify")
-    @unittest.mock.patch("service.ToDoAction.notify", unittest.mock.MagicMock())
+    @unittest.mock.patch("service.Task.notify")
+    @unittest.mock.patch("service.Routine.notify")
+    @unittest.mock.patch("service.ToDo.notify", unittest.mock.MagicMock())
     def test_uncomplete(self, mock_routine_notify, mock_task_notify, mock_request):
 
         mock_request.session = self.session
@@ -5048,7 +5057,7 @@ class TestTaskAction(TestRest):
             }]
         })
 
-        self.assertTrue(service.TaskAction.uncomplete(routine.data["tasks"][0], routine))
+        self.assertTrue(service.Task.uncomplete(routine.data["tasks"][0], routine))
         self.assertNotIn("end", routine.data["tasks"][0])
         self.assertEqual(routine.status, "opened")
         item = self.session.query(mysql.ToDo).get(todo.id)
@@ -5056,9 +5065,11 @@ class TestTaskAction(TestRest):
         mock_task_notify.assert_called_once_with("uncomplete", routine.data["tasks"][0], routine)
         mock_routine_notify.assert_called_once_with("uncomplete", routine)
 
-        self.assertFalse(service.TaskAction.uncomplete(routine.data["tasks"][0], routine))
+        self.assertFalse(service.Task.uncomplete(routine.data["tasks"][0], routine))
         mock_task_notify.assert_called_once()
         mock_routine_notify.assert_called_once()
+
+class TestTaskA(TestRest):
 
     @unittest.mock.patch("service.time.time", unittest.mock.MagicMock(return_value=7))
     @unittest.mock.patch("service.notify", unittest.mock.MagicMock)
