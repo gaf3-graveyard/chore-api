@@ -19,8 +19,10 @@ class MySQL(object):
 
     def __init__(self):
 
+        self.database = os.environ.get("DATABASE", DATABASE)
+
         self.engine = sqlalchemy.create_engine(
-            f"mysql+pymysql://root@{os.environ['MYSQL_HOST']}:{os.environ['MYSQL_PORT']}/{DATABASE}"
+            f"mysql+pymysql://root@{os.environ['MYSQL_HOST']}:{os.environ['MYSQL_PORT']}/{self.database}"
         )
         self.maker = sqlalchemy.orm.sessionmaker(bind=self.engine)
 
@@ -31,13 +33,14 @@ class MySQL(object):
 
 def create_database():
 
+    database = os.environ.get("DATABASE", DATABASE)
     connection = pymysql.connect(host=os.environ['MYSQL_HOST'], user='root')
 
     try:
 
         with connection.cursor() as cursor:
             cursor._defer_warnings = True
-            cursor.execute(f"CREATE DATABASE IF NOT EXISTS {DATABASE}")
+            cursor.execute(f"CREATE DATABASE IF NOT EXISTS {database}")
 
         connection.commit()
 
@@ -48,13 +51,14 @@ def create_database():
 
 def drop_database():
 
+    database = os.environ.get("DATABASE", DATABASE)
     connection = pymysql.connect(host=os.environ['MYSQL_HOST'], user='root')
 
     try:
 
         with connection.cursor() as cursor:
             cursor._defer_warnings = True
-            cursor.execute(f"DROP DATABASE IF EXISTS {DATABASE}")
+            cursor.execute(f"DROP DATABASE IF EXISTS {database}")
 
         connection.commit()
 

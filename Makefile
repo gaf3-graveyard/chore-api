@@ -13,6 +13,7 @@ ENVIRONMENT=-e SLEEP=0.1 \
 			-e REDIS_HOST=redis-klotio \
 			-e REDIS_PORT=6379 \
 			-e REDIS_CHANNEL=nandy.io/chore \
+			-e DATABASE=nandy_test \
 			-e PYTHONUNBUFFERED=1
 PORT=6765
 
