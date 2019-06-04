@@ -376,30 +376,33 @@ class Status(Model):
             "data": {}
         }
 
-        template = {}
+        data = {}
 
         if "template" in kwargs:
-            template = kwargs["template"]
+            data = kwargs["template"]
         elif "template_id" in kwargs and kwargs["template_id"]:
             template = flask.request.session.query(
                 mysql.Template
             ).get(
                 kwargs["template_id"]
-            ).data  
+            )
+            data = template.data
+            if "name" not in data:
+                data["name"] = template.name
 
-        if template:
-            fields["data"].update(copy.deepcopy(template))
+        if data:
+            fields["data"].update(copy.deepcopy(data))
         
         if "data" in kwargs:
             fields["data"].update(copy.deepcopy(kwargs["data"]))
 
-        person = None
+        person = kwargs.get("person", fields["data"].get("person"))
 
-        if "person" in fields["data"]:
+        if person:
             fields["person_id"] = flask.request.session.query(
                 mysql.Person
             ).filter_by(
-                name=fields["data"]["person"]
+                name=person
             ).one().id
 
         for field in ["person_id", "name", "status", "created", "updated"]:

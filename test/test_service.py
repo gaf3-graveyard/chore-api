@@ -1242,15 +1242,16 @@ class TestArea(TestRest):
             "template": {
                 "by": "template",
                 "name": "hey",
-                "person": "unit"
-            }
+                "person": "nope"
+            },
+            "person": "unit"
         }), {
             "name": "hey",
             "person_id": person.id,
             "data": {
                 "by": "template",
                 "name": "hey",
-                "person": "unit"
+                "person": "nope"
             }
         })
 
@@ -1258,7 +1259,8 @@ class TestArea(TestRest):
 
         template = self.sample.template("unit", "routine", data={
             "by": "template_id",
-            "status": "negative"
+            "status": "negative",
+            "person": "unit"
         })
 
         self.assertEqual(service.Area.build(**{
@@ -1266,8 +1268,11 @@ class TestArea(TestRest):
             "template_id": template.id
         }), {
             "name": "hey",
+            "person_id": person.id,
             "status": "negative",
             "data": {
+                "name": "unit",
+                "person": "unit",
                 "by": "template_id",
                 "status": "negative"
             }
@@ -2057,15 +2062,17 @@ class TestAct(TestRest):
             "template": {
                 "by": "template",
                 "name": "hey",
-                "person": "unit"
-            }
+                "person": "unit",
+                "person": "nope"
+            },
+            "person": "unit"
         }), {
             "name": "hey",
             "person_id": person.id,
             "data": {
                 "by": "template",
                 "name": "hey",
-                "person": "unit"
+                "person": "nope"
             }
         })
 
@@ -2073,7 +2080,8 @@ class TestAct(TestRest):
 
         template = self.sample.template("unit", "routine", data={
             "by": "template_id",
-            "status": "negative"
+            "status": "negative",
+            "person": "unit"
         })
 
         self.assertEqual(service.Act.build(**{
@@ -2081,8 +2089,11 @@ class TestAct(TestRest):
             "template_id": template.id
         }), {
             "name": "hey",
+            "person_id": person.id,
             "status": "negative",
             "data": {
+                "name": "unit",
+                "person": "unit",
                 "by": "template_id",
                 "status": "negative"
             }
@@ -2877,15 +2888,16 @@ class TestToDo(TestRest):
             "template": {
                 "by": "template",
                 "name": "hey",
-                "person": "unit"
-            }
+                "person": "nope"
+            },
+            "person": "unit"
         }), {
             "name": "hey",
             "person_id": person.id,
             "data": {
                 "by": "template",
                 "name": "hey",
-                "person": "unit"
+                "person": "nope"
             }
         })
 
@@ -2893,7 +2905,8 @@ class TestToDo(TestRest):
 
         template = self.sample.template("unit", "todo", data={
             "by": "template_id",
-            "status": "closed"
+            "status": "closed",
+            "person": "unit"
         })
 
         self.assertEqual(service.ToDo.build(**{
@@ -2901,8 +2914,11 @@ class TestToDo(TestRest):
             "template_id": template.id
         }), {
             "name": "hey",
+            "person_id": person.id,
             "status": "closed",
             "data": {
+                "name": "unit",
+                "person": "unit",
                 "by": "template_id",
                 "status": "closed"
             }
@@ -3959,15 +3975,16 @@ class TestRoutine(TestRest):
             "template": {
                 "by": "template",
                 "name": "hey",
-                "person": "unit"
-            }
+                "person": "nope"
+            },
+            "person": "unit"
         }), {
             "name": "hey",
             "person_id": person.id,
             "data": {
                 "by": "template",
                 "name": "hey",
-                "person": "unit"
+                "person": "nope"
             }
         })
 
@@ -3975,7 +3992,8 @@ class TestRoutine(TestRest):
 
         template = self.sample.template("unit", "routine", data={
             "by": "template_id",
-            "status": "closed"
+            "status": "closed",
+            "person": "unit"
         })
 
         self.assertEqual(service.Routine.build(**{
@@ -3983,8 +4001,11 @@ class TestRoutine(TestRest):
             "template_id": template.id
         }), {
             "name": "hey",
+            "person_id": person.id,
             "status": "closed",
             "data": {
+                "name": "unit",
+                "person": "unit",
                 "by": "template_id",
                 "status": "closed"
             }
